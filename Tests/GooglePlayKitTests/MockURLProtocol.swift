@@ -33,28 +33,42 @@ struct RecordedRequest: Sendable {
 
 /// A `URLProtocol` that answers requests from a per-session handler.
 ///
-/// Handlers are keyed by a session id carried in a request header, so suites running in
-/// parallel cannot steal each other's responses.
+/// Handlers are keyed by a session id carried in a request header. On Linux,
+/// `httpAdditionalHeaders` is not reliably visible to the protocol, so a request can arrive with
+/// no session id at all; the most recently registered session is used as the fallback. That
+/// fallback is only sound while one session is live at a time, which is why every suite using
+/// this type is `.serialized` and CI runs `swift test --no-parallel`.
 final class MockURLProtocol: URLProtocol, @unchecked Sendable {
     typealias Handler = @Sendable (URLRequest) -> MockHTTPResponse
 
-    private static let handlers = Mutex<[String: Handler]>([:])
-    private static let recorded = Mutex<[String: [RecordedRequest]]>([:])
+    private static let state = Mutex<State>(State())
+
+    private struct State {
+        var handlers: [String: Handler] = [:]
+        var recorded: [String: [RecordedRequest]] = [:]
+        var latestSessionID: String?
+    }
 
     static let sessionHeader = "X-Mock-Session-ID"
 
     static func register(sessionID: String, handler: @escaping Handler) {
-        handlers.withLock { $0[sessionID] = handler }
-        recorded.withLock { $0[sessionID] = [] }
+        state.withLock {
+            $0.handlers[sessionID] = handler
+            $0.recorded[sessionID] = []
+            $0.latestSessionID = sessionID
+        }
     }
 
     static func requests(for sessionID: String) -> [RecordedRequest] {
-        recorded.withLock { $0[sessionID] ?? [] }
+        state.withLock { $0.recorded[sessionID] ?? [] }
     }
 
     static func unregister(sessionID: String) {
-        handlers.withLock { _ = $0.removeValue(forKey: sessionID) }
-        recorded.withLock { _ = $0.removeValue(forKey: sessionID) }
+        state.withLock {
+            $0.handlers.removeValue(forKey: sessionID)
+            $0.recorded.removeValue(forKey: sessionID)
+            if $0.latestSessionID == sessionID { $0.latestSessionID = nil }
+        }
     }
 
     override class func canInit(with request: URLRequest) -> Bool { true }
@@ -62,9 +76,13 @@ final class MockURLProtocol: URLProtocol, @unchecked Sendable {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
-        guard let sessionID = request.value(forHTTPHeaderField: Self.sessionHeader),
-            let handler = Self.handlers.withLock({ $0[sessionID] })
-        else {
+        let header = request.value(forHTTPHeaderField: Self.sessionHeader)
+        let resolved: (id: String, handler: Handler)? = Self.state.withLock { state in
+            if let header, let handler = state.handlers[header] { return (header, handler) }
+            guard let latest = state.latestSessionID, let handler = state.handlers[latest] else { return nil }
+            return (latest, handler)
+        }
+        guard let (sessionID, handler) = resolved else {
             client?.urlProtocol(
                 self,
                 didFailWithError: NSError(
@@ -92,8 +110,8 @@ final class MockURLProtocol: URLProtocol, @unchecked Sendable {
                 return data
             }
 
-        Self.recorded.withLock {
-            $0[sessionID, default: []].append(
+        Self.state.withLock {
+            $0.recorded[sessionID, default: []].append(
                 RecordedRequest(
                     method: request.httpMethod ?? "GET",
                     path: request.url?.path ?? "",

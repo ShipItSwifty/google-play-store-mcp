@@ -26,7 +26,7 @@ private let tracksJSON = """
     ]}
     """
 
-@Suite("Google Play read API")
+@Suite("Google Play read API", .serialized)
 struct GooglePlayReadAPITests {
 
     @Test("listTracks creates an edit, reads tracks, and deletes the edit")

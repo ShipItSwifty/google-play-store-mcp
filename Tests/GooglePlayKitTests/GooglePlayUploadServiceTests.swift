@@ -20,7 +20,7 @@ private func makeClient(
     return (GooglePlayClient(tokenProvider: { "test-token" }, session: session), sessionID)
 }
 
-@Suite("Google Play upload service")
+@Suite("Google Play upload service", .serialized)
 struct GooglePlayUploadServiceTests {
 
     @Test("uploadAndRelease walks edit → upload → track → commit")

@@ -17,19 +17,28 @@ final class ToolMockURLProtocol: URLProtocol, @unchecked Sendable {
     typealias Handler = @Sendable (URLRequest) -> (status: Int, body: String)
 
     nonisolated(unsafe) private static var handlers: [String: Handler] = [:]
+    nonisolated(unsafe) private static var latestSessionID: String?
     private static let lock = NSLock()
     static let sessionHeader = "X-Mock-Session-ID"
 
     static func register(sessionID: String, handler: @escaping Handler) {
-        lock.withLock { handlers[sessionID] = handler }
+        lock.withLock {
+            handlers[sessionID] = handler
+            latestSessionID = sessionID
+        }
     }
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
+        // On Linux `httpAdditionalHeaders` is not reliably visible here, so fall back to the most
+        // recently registered session. Sound only because this suite is `.serialized`.
         let sessionID = request.value(forHTTPHeaderField: Self.sessionHeader) ?? ""
-        guard let handler = Self.lock.withLock({ Self.handlers[sessionID] }) else {
+        let handler = Self.lock.withLock {
+            Self.handlers[sessionID] ?? Self.latestSessionID.flatMap { Self.handlers[$0] }
+        }
+        guard let handler else {
             client?.urlProtocol(self, didFailWithError: URLError(.badURL))
             return
         }
@@ -67,7 +76,7 @@ private func text(of result: CallTool.Result) throws -> String {
     return value
 }
 
-@Suite("MCP tool handlers")
+@Suite("MCP tool handlers", .serialized)
 struct PlayToolHandlerTests {
 
     @Test("play_list_tracks renders the live release and rollout percentage")
