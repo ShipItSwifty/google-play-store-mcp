@@ -127,6 +127,65 @@ struct PlayToolDispatchTests {
     }
 }
 
+@Suite("Tool argument decoding")
+struct ToolArgumentDecodingTests {
+
+    /// Decodes arguments from real JSON rather than hand-building `Value` cases — the encoding a
+    /// host actually sends is exactly what the hand-built version failed to represent.
+    private func arguments(_ json: String) throws -> ToolArguments {
+        ToolArguments(try JSONDecoder().decode([String: Value].self, from: Data(json.utf8)))
+    }
+
+    @Test("an integral fraction sent as JSON 1.0 is read as a number, not reported missing")
+    func integralDoubleIsRead() throws {
+        // JSON 1.0 decodes to Value.int, so a doubleValue-only read reported "missing argument"
+        // for a value that was supplied — hiding the real range error behind a wrong one.
+        let args = try arguments(#"{"userFraction": 1.0}"#)
+
+        #expect(try args.requireDouble("userFraction") == 1.0)
+    }
+
+    @Test("a plain integer is read as a number")
+    func integerIsRead() throws {
+        #expect(try arguments(#"{"userFraction": 0}"#).requireDouble("userFraction") == 0.0)
+    }
+
+    @Test("a fractional double is read as a number")
+    func fractionalDoubleIsRead() throws {
+        #expect(try arguments(#"{"userFraction": 0.25}"#).requireDouble("userFraction") == 0.25)
+    }
+
+    @Test("a stringified number is accepted, since some hosts send them that way")
+    func stringifiedNumberIsRead() throws {
+        #expect(try arguments(#"{"userFraction": "0.5"}"#).requireDouble("userFraction") == 0.5)
+    }
+
+    @Test("a genuinely absent argument is still reported missing")
+    func absentArgumentThrows() throws {
+        #expect(throws: GoogleAPIError.self) {
+            _ = try arguments(#"{}"#).requireDouble("userFraction")
+        }
+    }
+
+    @Test("a non-numeric value is reported missing rather than silently coerced")
+    func nonNumericThrows() throws {
+        #expect(throws: GoogleAPIError.self) {
+            _ = try arguments(#"{"userFraction": "not-a-number"}"#).requireDouble("userFraction")
+        }
+    }
+
+    @Test("maxResults sent as a JSON double is still honoured")
+    func integerArgumentAcceptsDouble() throws {
+        #expect(try arguments(#"{"maxResults": 5.0}"#).int("maxResults", default: 50) == 5)
+    }
+
+    @Test("maxResults is clamped into range")
+    func integerArgumentClamps() throws {
+        #expect(try arguments(#"{"maxResults": 0}"#).int("maxResults", default: 50) == 1)
+        #expect(try arguments(#"{"maxResults": 9999}"#).int("maxResults", default: 50) == 100)
+    }
+}
+
 @Suite("MCP rendering")
 struct PlayToolRenderingTests {
 

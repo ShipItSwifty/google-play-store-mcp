@@ -76,16 +76,29 @@ struct ToolArguments: Sendable {
     /// The value is clamped to `1...max`: a host that sends `maxResults: 0` would otherwise get
     /// an empty list back with no explanation.
     func int(_ key: String, default defaultValue: Int, max maxValue: Int = 100) -> Int {
-        guard let raw = values[key]?.intValue else { return defaultValue }
+        guard let raw = number(key).map({ Int($0) }) else { return defaultValue }
         return min(max(raw, 1), maxValue)
     }
 
     /// A required floating-point argument.
     func requireDouble(_ key: String) throws -> Double {
-        if let value = values[key]?.doubleValue { return value }
-        // Some hosts send a number as a string; accept that rather than failing a valid call.
-        if let text = string(key), let value = Double(text) { return value }
-        throw GoogleAPIError.invalidConfiguration(reason: "Missing required numeric argument '\(key)'.")
+        guard let value = number(key) else {
+            throw GoogleAPIError.invalidConfiguration(reason: "Missing required numeric argument '\(key)'.")
+        }
+        return value
+    }
+
+    /// Reads a numeric argument regardless of how the host encoded it.
+    ///
+    /// `Value.doubleValue` only matches the `.double` case, but JSON `1.0` decodes as `.int` —
+    /// so reading a fraction of exactly `1.0` through `doubleValue` alone yields nil and reports
+    /// a *missing* argument for one that was supplied. Some hosts also stringify numbers.
+    private func number(_ key: String) -> Double? {
+        guard let value = values[key] else { return nil }
+        if let double = value.doubleValue { return double }
+        if let int = value.intValue { return Double(int) }
+        if let text = value.stringValue, let parsed = Double(text) { return parsed }
+        return nil
     }
 }
 
