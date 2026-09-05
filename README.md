@@ -138,6 +138,22 @@ swift build -c release --product google-play-store-mcp
 
 ### Register with a client
 
+Supported clients: Claude Code, Codex CLI, Cursor, Windsurf.
+
+```bash
+scripts/install-mcp.sh --service-account-path /path/to/service-account.json
+```
+
+With no `--client` flag it detects whichever of those are installed and asks before touching
+each one's config (Claude Code and Codex go through their own `mcp add` CLI; Cursor and Windsurf
+get a JSON diff, confirmation, and a timestamped backup of the file it edits). Nothing runs
+automatically as part of `brew install` — you run this by hand, whenever you want the server
+registered. Add `--writes` to enable the write tools, `--dry-run` to preview without writing, or
+`--client <name>` to target one client. See `scripts/install-mcp.sh --help` for all options.
+
+To register by hand instead, the config shape is the same for every client except Codex (which
+uses TOML in `~/.codex/config.toml` under `[mcp_servers.google-play-store]`):
+
 ```json
 {
   "mcpServers": {
@@ -152,6 +168,13 @@ swift build -c release --product google-play-store-mcp
 ```
 
 Add `"GOOGLE_PLAY_ENABLE_WRITES": "1"` to that `env` block to enable the write tools.
+
+| Client | Config file |
+|---|---|
+| Claude Code | `claude mcp add` (see `claude mcp add --help`) |
+| Codex CLI | `codex mcp add` (see `codex mcp add --help`), or `~/.codex/config.toml` |
+| Cursor | `~/.cursor/mcp.json` (or `.cursor/mcp.json` for one project) |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` |
 
 ## Development
 
