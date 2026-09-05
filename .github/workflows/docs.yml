@@ -1,0 +1,77 @@
+name: Documentation
+
+# Builds the GooglePlayKit DocC archive and publishes it to GitHub Pages.
+# Enable Pages for this repo with "Source: GitHub Actions" before the first run.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build DocC
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Build DocC site
+        run: |
+          swift package --allow-writing-to-directory ./docs \
+            generate-documentation \
+            --target GooglePlayKit \
+            --disable-indexing \
+            --transform-for-static-hosting \
+            --hosting-base-path google-play-store-mcp \
+            --output-path ./docs
+
+      # The DocC JS app does not navigate away from the archive root, so a visitor
+      # landing on the Pages URL would see "page not found" without this.
+      - name: Add root redirect to documentation
+        run: |
+          cat > ./docs/index.html <<'EOF'
+          <!doctype html>
+          <html>
+            <head>
+              <meta charset="utf-8">
+              <meta http-equiv="refresh" content="0; url=documentation/googleplaykit">
+              <link rel="canonical" href="documentation/googleplaykit">
+              <title>GooglePlayKit Documentation</title>
+            </head>
+            <body>
+              <p>Redirecting to <a href="documentation/googleplaykit">GooglePlayKit documentation</a>…</p>
+            </body>
+          </html>
+          EOF
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./docs
+
+  deploy:
+    name: Deploy to Pages
+    needs: build
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

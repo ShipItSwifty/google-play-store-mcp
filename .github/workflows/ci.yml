@@ -1,0 +1,101 @@
+name: Build & Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    name: Format Lint
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Swift version
+        run: swift --version
+
+      - name: swift-format lint (strict)
+        run: |
+          xcrun swift-format lint --recursive --strict \
+            --configuration .swift-format \
+            Sources Tests
+
+  macos:
+    name: Build & Test (macOS)
+    needs: lint
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Resolve dependencies
+        run: swift package resolve
+
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: swift test --enable-code-coverage --no-parallel
+
+      - name: Coverage gate
+        env:
+          # Line-coverage floor. Raise this as coverage climbs; never lower it
+          # without a deliberate reason. Current: ~81%.
+          MIN_LINE_COVERAGE: "78"
+        run: scripts/coverage-gate.sh
+
+      - name: Smoke test MCP binary
+        run: |
+          swift build --product google-play-store-mcp
+          BIN=$(swift build --product google-play-store-mcp --show-bin-path)/google-play-store-mcp
+          # Drive a real handshake over stdio: initialize, then list the tools.
+          # No credentials are needed for either. Closing stdin must end the
+          # process, so this also asserts the server exits with its host.
+          {
+            printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}'
+            printf '%s\n' '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+            sleep 5
+          } | "$BIN" > handshake.json
+          grep -q '"serverInfo"' handshake.json
+          grep -q 'play_list_tracks' handshake.json
+
+  linux:
+    name: Build & Test (Linux)
+    needs: lint
+    runs-on: ubuntu-24.04
+    container:
+      image: swift:6.3-noble
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Resolve dependencies
+        run: swift package resolve
+
+      - name: Build (libraries + MCP server)
+        run: |
+          swift build --product GoogleAuthKit
+          swift build --product GooglePlayKit
+          swift build --product google-play-store-mcp
+
+      - name: Test
+        run: swift test --enable-code-coverage --no-parallel

@@ -1,0 +1,197 @@
+name: Release
+
+# Produces the archives consumed by the Homebrew tap
+# (ShipItSwifty/homebrew-tap, formula: google-play-store-mcp):
+#   google-play-store-mcp-<version>-macos-universal.tar.gz   (arm64 + x86_64)
+#   google-play-store-mcp-<version>-linux-x86_64.tar.gz      (static stdlib)
+# The tap's "Update Formula" workflow polls this repo's releases for those names.
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing release tag to rebuild and publish
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
+
+concurrency:
+  group: release-${{ inputs.version || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build-macos:
+    name: Build macOS Universal Binary
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ env.RELEASE_VERSION }}
+
+      - name: Stamp version from tag
+        run: |
+          sed -i.bak 's/static let current = "[^"]*"/static let current = "'"${RELEASE_VERSION}"'"/' \
+            Sources/GooglePlayMCPServer/Entry.swift
+          rm -f Sources/GooglePlayMCPServer/Entry.swift.bak
+          grep -q "static let current = \"${RELEASE_VERSION}\"" Sources/GooglePlayMCPServer/Entry.swift
+
+      - name: Swift version
+        run: swift --version
+
+      # Speeds up repeated release builds: the resolved dependency checkout and
+      # the compiled build products for both arches. Keyed on the pin file so a
+      # dependency bump busts the cache.
+      - name: Cache SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build
+            ~/Library/Caches/org.swift.swiftpm
+            ~/.swiftpm
+          key: ${{ runner.os }}-spm-release-${{ hashFiles('Package.resolved', 'Package.swift') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-release-
+
+      - name: Resolve dependencies
+        run: swift package resolve
+
+      - name: Test
+        run: swift test --no-parallel
+
+      - name: Build arm64
+        run: swift build -c release --product google-play-store-mcp --arch arm64 --disable-sandbox
+
+      - name: Build x86_64
+        run: swift build -c release --product google-play-store-mcp --arch x86_64 --disable-sandbox
+
+      - name: Create universal binary
+        run: |
+          lipo -create -output google-play-store-mcp \
+            .build/arm64-apple-macosx/release/google-play-store-mcp \
+            .build/x86_64-apple-macosx/release/google-play-store-mcp
+          lipo -info google-play-store-mcp
+
+      - name: Package tarball
+        run: |
+          tar -czf "google-play-store-mcp-${RELEASE_VERSION}-macos-universal.tar.gz" google-play-store-mcp
+          echo "TARBALL=google-play-store-mcp-${RELEASE_VERSION}-macos-universal.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-universal
+          path: ${{ env.TARBALL }}
+          retention-days: 7
+
+  build-linux:
+    name: Build Linux Binary
+    runs-on: ubuntu-24.04
+    container:
+      image: swift:6.3-noble
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ env.RELEASE_VERSION }}
+
+      - name: Stamp version from tag
+        run: |
+          sed -i.bak 's/static let current = "[^"]*"/static let current = "'"${RELEASE_VERSION}"'"/' \
+            Sources/GooglePlayMCPServer/Entry.swift
+          rm -f Sources/GooglePlayMCPServer/Entry.swift.bak
+          grep -q "static let current = \"${RELEASE_VERSION}\"" Sources/GooglePlayMCPServer/Entry.swift
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Cache SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build
+            /root/.cache/org.swift.swiftpm
+            /root/.swiftpm
+          key: ${{ runner.os }}-spm-release-linux-${{ hashFiles('Package.resolved', 'Package.swift') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-release-linux-
+
+      - name: Resolve dependencies
+        run: swift package resolve
+
+      - name: Build static binary
+        run: swift build -c release --product google-play-store-mcp --static-swift-stdlib
+
+      - name: Package tarball
+        run: |
+          cp .build/release/google-play-store-mcp google-play-store-mcp
+          tar -czf "google-play-store-mcp-${RELEASE_VERSION}-linux-x86_64.tar.gz" google-play-store-mcp
+          echo "TARBALL=google-play-store-mcp-${RELEASE_VERSION}-linux-x86_64.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-x86_64
+          path: ${{ env.TARBALL }}
+          retention-days: 7
+
+  release:
+    name: Create GitHub Release
+    needs: [build-macos, build-linux]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ env.RELEASE_VERSION }}
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-universal
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-x86_64
+
+      - name: Generate checksums
+        run: |
+          sha256sum google-play-store-mcp-*.tar.gz \
+            > "google-play-store-mcp-${RELEASE_VERSION}-checksums.txt"
+
+      - name: Attest release archives
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: 'google-play-store-mcp-*.tar.gz'
+
+      - name: Generate release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method POST \
+            "/repos/${{ github.repository }}/releases/generate-notes" \
+            -f tag_name="${RELEASE_VERSION}" \
+            -f target_commitish=main \
+            --jq '.body' > release_notes.md
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_VERSION }}
+          body_path: release_notes.md
+          files: |
+            google-play-store-mcp-*.tar.gz
+            google-play-store-mcp-*-checksums.txt
