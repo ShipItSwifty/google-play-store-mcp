@@ -91,9 +91,13 @@ GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH=./service-account.json \
 ```
 
 Without both variables the suite skips with a message naming what is missing, so CI stays green
-without credentials. Run it before tagging; the write paths (`uploadAndRelease`, `updateRollout`,
-`haltRollout`) still have no live coverage and must be exercised by hand against a throwaway app
-before they can be called vetted.
+without credentials. Run it before tagging.
+
+Adding `GOOGLE_PLAY_LIVE_WRITE_TESTS=1` enables two more tests that exercise the write encoding
+against Play — a track PUT and Play's own pre-commit validation — inside an edit that is then
+deleted rather than committed, so the app does not change. Still uncovered live: `uploadAndRelease`
+end to end, and a real staged rollout being advanced or halted, both of which need a throwaway app
+with an artifact to publish.
 
 ## Conventions
 

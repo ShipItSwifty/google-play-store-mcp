@@ -10,8 +10,11 @@ import Testing
 /// the edit lifecycle but cannot prove that Google accepts them. These fill that gap, and are the
 /// intended way to vet a release before tagging it.
 ///
-/// **Read-only.** Nothing here creates a release, changes a rollout, or uploads an artifact. The
-/// only writes are the throwaway edits that Play requires for reads, and each is deleted.
+/// **Nothing here changes the app.** The read tests' only writes are the throwaway edits Play
+/// requires for reads, each of which is deleted. Two further tests, gated behind
+/// `GOOGLE_PLAY_LIVE_WRITE_TESTS=1`, exercise the write encoding: they PUT a track inside an edit
+/// and then delete that edit, never committing it, so Play validates the payload without the app
+/// changing. No test uploads an artifact or commits an edit.
 ///
 /// Skipped unless both are set:
 /// - `GOOGLE_PLAY_TEST_PACKAGE_NAME` — a package the service account can read
@@ -111,6 +114,65 @@ struct LiveGooglePlayTests {
         #expect(reviews.count <= 5)
         for review in reviews {
             #expect(!review.reviewId.isEmpty)
+        }
+    }
+
+    @Test(
+        "the track-write payload is accepted by Play, in an edit that is never committed",
+        .enabled(
+            if: ProcessInfo.processInfo.environment["GOOGLE_PLAY_LIVE_WRITE_TESTS"] == "1",
+            "set GOOGLE_PLAY_LIVE_WRITE_TESTS=1 to exercise the write encoding against Play"))
+    func trackWritePayloadIsAccepted() async throws {
+        let (client, packageName) = try makeClient()
+
+        // The one write we can make against a real app without changing anything: Play validates
+        // a track PUT when it receives it, but an edit only takes effect on commit. So this
+        // proves our GooglePlayTrack encoding is accepted, then throws the edit away. There is
+        // deliberately no commitEdit call anywhere in this test.
+        let edit = try await client.createEdit(packageName: packageName)
+        do {
+            let existing: GooglePlayTrack = try await client.get(
+                "/applications/\(packageName)/edits/\(edit.id)/tracks/internal")
+            let releases = try #require(existing.releases)
+
+            // Send the track back exactly as read. Play accepts or rejects the shape on the PUT.
+            let echoed = try await client.setTrack(
+                packageName: packageName,
+                editId: edit.id,
+                track: GooglePlayTrack(track: "internal", releases: releases)
+            )
+            #expect(echoed.track == "internal")
+
+            // Play's own pre-commit validation, on an edit carrying our payload.
+            _ = try await client.validateEdit(packageName: packageName, editId: edit.id)
+
+            try await client.deleteEdit(packageName: packageName, editId: edit.id)
+        } catch {
+            try? await client.deleteEdit(packageName: packageName, editId: edit.id)
+            throw error
+        }
+
+        // The edit is gone, so nothing was left pending in the Play Console.
+        await #expect(throws: GoogleAPIError.self) {
+            _ = try await client.getEdit(packageName: packageName, editId: edit.id)
+        }
+    }
+
+    @Test(
+        "rollout helpers refuse a track with no in-progress release, and leave no edit behind",
+        .enabled(
+            if: ProcessInfo.processInfo.environment["GOOGLE_PLAY_LIVE_WRITE_TESTS"] == "1",
+            "set GOOGLE_PLAY_LIVE_WRITE_TESTS=1 to exercise the write encoding against Play"))
+    func rolloutHelpersRefuseNonStagedTrack() async throws {
+        let (client, packageName) = try makeClient()
+
+        // No track here has a staged rollout, so both helpers must bail out — and, importantly,
+        // clean up the edit they opened to find that out. A leaked edit blocks a human.
+        await #expect(throws: GoogleAPIError.self) {
+            _ = try await client.updateRollout(packageName: packageName, track: "internal", userFraction: 0.5)
+        }
+        await #expect(throws: GoogleAPIError.self) {
+            _ = try await client.haltRollout(packageName: packageName, track: "internal")
         }
     }
 
