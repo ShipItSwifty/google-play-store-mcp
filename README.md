@@ -52,7 +52,9 @@ let versionCode = try await uploader.uploadAndRelease(
 )
 
 // Rollout control.
+// userFraction is exclusive: 0 < f < 1. A full rollout is a .completed release, not 1.0.
 try await client.updateRollout(packageName: "com.example.app", track: "production", userFraction: 0.5)
+// Halting preserves the fraction, so you know where the rollout stopped.
 try await client.haltRollout(packageName: "com.example.app", track: "production")
 ```
 

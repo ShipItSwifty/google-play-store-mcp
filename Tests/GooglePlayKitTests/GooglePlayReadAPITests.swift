@@ -143,18 +143,37 @@ struct GooglePlayReadAPITests {
         #expect(!requests.contains { $0.method == "DELETE" })
     }
 
-    @Test("updateRollout rejects a fraction outside 0...1 before touching the network")
-    func updateRolloutValidatesFraction() async throws {
+    @Test(
+        "updateRollout rejects a fraction outside Play's exclusive 0<f<1 range before touching the network",
+        arguments: [1.5, -0.1, 0.0, 1.0])
+    func updateRolloutValidatesFraction(fraction: Double) async throws {
+        // Play's contract is 0 < userFraction < 1 exclusive: a full rollout is a completed
+        // release, and 0 is not how you stop one. Catching it locally beats a 400 from Google.
         let (client, sessionID) = makeClient { _ in .error(statusCode: 500) }
 
         await #expect(throws: GoogleAPIError.self) {
-            _ = try await client.updateRollout(packageName: "com.example.app", track: "production", userFraction: 1.5)
+            _ = try await client.updateRollout(
+                packageName: "com.example.app", track: "production", userFraction: fraction)
         }
         #expect(MockURLProtocol.requests(for: sessionID).isEmpty)
     }
 
-    @Test("haltRollout drops userFraction, which Play rejects on a halted release")
-    func haltRolloutOmitsFraction() async throws {
+    @Test("updateRollout accepts a fraction strictly inside the range", arguments: [0.001, 0.5, 0.999])
+    func updateRolloutAcceptsValidFraction(fraction: Double) async throws {
+        let (client, _) = makeClient { request in
+            if request.httpMethod == "GET" {
+                return .json(#"{"track":"production","releases":[{"versionCodes":["1"],"status":"inProgress","userFraction":0.0001}]}"#)
+            }
+            if request.httpMethod == "PUT" { return .json(#"{"track":"production"}"#) }
+            return .json(#"{"id":"e"}"#)
+        }
+
+        _ = try await client.updateRollout(
+            packageName: "com.example.app", track: "production", userFraction: fraction)
+    }
+
+    @Test("haltRollout keeps the rollout fraction so the pause point is recorded")
+    func haltRolloutPreservesFraction() async throws {
         let (client, sessionID) = makeClient { request in
             let path = request.url?.path ?? ""
             if request.httpMethod == "POST", path.hasSuffix("/edits") { return .json(#"{"id":"edit-4"}"#) }
@@ -172,7 +191,10 @@ struct GooglePlayReadAPITests {
         let put = try #require(MockURLProtocol.requests(for: sessionID).first { $0.method == "PUT" })
         let body = try #require(put.body.map { String(decoding: $0, as: UTF8.self) })
         #expect(body.contains("halted"))
-        #expect(!body.contains("userFraction"))
+        // Play accepts userFraction on a halted release; keeping it records how far the rollout
+        // got, which is what a later resume needs.
+        #expect(body.contains("userFraction"))
+        #expect(body.contains("0.3"))
     }
 
     @Test("updateRollout preserves the other releases on the track")

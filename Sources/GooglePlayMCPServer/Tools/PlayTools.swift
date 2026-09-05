@@ -173,7 +173,7 @@ enum PlayTools {
                 .string("releaseNotesLanguage", "BCP 47 tag for the release notes, e.g. en-US."),
                 .string("releaseNotesText", "Release note text (max 500 characters)."),
                 .string("status", "draft, inProgress, halted, or completed. Defaults to completed."),
-                .number("userFraction", "Staged rollout fraction 0.0-1.0. Only valid with status inProgress."),
+                .number("userFraction", "Staged rollout fraction, strictly between 0 and 1. Only valid with status inProgress or halted."),
             ],
             isReadOnly: false
         ) { arguments, client in
@@ -214,7 +214,7 @@ enum PlayTools {
             arguments: [
                 packageArgument,
                 .string("track", "Track name: internal, alpha, beta, or production.", required: true),
-                .number("userFraction", "New rollout fraction, 0.0-1.0.", required: true),
+                .number("userFraction", "New rollout fraction, strictly between 0 and 1 (exclusive).", required: true),
             ],
             isReadOnly: false
         ) { arguments, client in

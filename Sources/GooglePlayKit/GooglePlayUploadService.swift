@@ -161,8 +161,9 @@ public struct GooglePlayUploadService: Sendable {
             name: releaseName,
             versionCodes: ["\(versionCode)"],
             status: status,
-            // Play rejects a userFraction on anything but an in-progress rollout.
-            userFraction: status == .inProgress ? userFraction : nil,
+            // Play accepts userFraction only on a staged release — inProgress or halted. Sending
+            // it on a completed or draft release is rejected.
+            userFraction: (status == .inProgress || status == .halted) ? userFraction : nil,
             releaseNotes: releaseNotes.isEmpty ? nil : releaseNotes
         )
         _ = try await client.setTrack(

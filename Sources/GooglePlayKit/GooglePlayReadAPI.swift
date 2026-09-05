@@ -111,17 +111,23 @@ extension GooglePlayClient {
 
     /// Changes the staged-rollout fraction of the in-progress release on a track, and commits.
     ///
-    /// - Parameter userFraction: The new fraction, in `0.0...1.0`. Play rejects a decrease, and
-    ///   a fraction of `1.0` should be a `.completed` release rather than a `1.0` rollout.
+    /// - Parameter userFraction: The new fraction. Play requires `0 < userFraction < 1`
+    ///   **exclusive** — a full rollout is a `.completed` release, not a fraction of `1.0`, and
+    ///   `0` is not a way to stop one (use ``haltRollout(packageName:track:)``). Play also
+    ///   rejects a decrease.
     @discardableResult
     public func updateRollout(
         packageName: String,
         track: String,
         userFraction: Double
     ) async throws -> GooglePlayTrack {
-        guard (0.0...1.0).contains(userFraction) else {
+        guard userFraction > 0, userFraction < 1 else {
             throw GoogleAPIError.invalidConfiguration(
-                reason: "Google Play: userFraction must be between 0.0 and 1.0, got \(userFraction)")
+                reason: """
+                    Google Play: userFraction must be greater than 0 and less than 1 (exclusive), got \
+                    \(userFraction). Use a completed release for a full rollout, or haltRollout to stop one.
+                    """
+            )
         }
         return try await mutateInProgressRelease(packageName: packageName, track: track) { release in
             GooglePlayRelease(
@@ -135,15 +141,18 @@ extension GooglePlayClient {
     }
 
     /// Halts the in-progress staged rollout on a track, and commits.
+    ///
+    /// The rollout fraction is preserved. Play accepts `userFraction` on a halted release, and
+    /// keeping it records how far the rollout had reached — which is what you need in order to
+    /// resume from that point rather than restarting.
     @discardableResult
     public func haltRollout(packageName: String, track: String) async throws -> GooglePlayTrack {
         try await mutateInProgressRelease(packageName: packageName, track: track) { release in
-            // A halted release carries no userFraction — Play rejects the pair.
             GooglePlayRelease(
                 name: release.name,
                 versionCodes: release.versionCodes,
                 status: .halted,
-                userFraction: nil,
+                userFraction: release.userFraction,
                 releaseNotes: release.releaseNotes
             )
         }

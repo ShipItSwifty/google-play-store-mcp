@@ -35,8 +35,10 @@ Extracted from [ShipItSwifty](https://github.com/ShipItSwifty/shipitswifty), whi
 4. **All public types are `Sendable`**, Swift 6 strict concurrency throughout.
 5. **Nothing shells out.** No `Foundation.Process`, no SwiftyShell. This keeps both libraries
    Linux-clean.
-6. **`userFraction` only rides with `.inProgress`.** Play rejects the pair on any other status;
-   both `assignToTrack` and `haltRollout` strip it.
+6. **`userFraction` rides only with a staged status, and is exclusive.** Play accepts it on
+   `.inProgress` *and* `.halted`, and requires `0 < userFraction < 1` — a full rollout is a
+   `.completed` release, not `1.0`. `assignToTrack` strips it on `.completed`/`.draft`;
+   `haltRollout` preserves it so the pause point survives.
 
 ## Adding an MCP tool
 
