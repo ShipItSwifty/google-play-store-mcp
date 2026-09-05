@@ -156,6 +156,9 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ env.RELEASE_VERSION }}
+          # The annotated tag object carries the release notes; a plain ref checkout omits it.
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Download macOS artifact
         uses: actions/download-artifact@v8
@@ -181,11 +184,46 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
+
+          # The annotated tag message is the hand-written summary of what changed and why.
+          # Without it a release body is just an auto-generated compare link, which tells a
+          # reader nothing about whether they need the upgrade.
+          git tag -l --format='%(contents:body)' "${RELEASE_VERSION}" > tag_notes.md
+
+          if [ -s tag_notes.md ]; then
+            cat tag_notes.md > release_notes.md
+            printf '\n' >> release_notes.md
+          else
+            echo "::warning::Tag ${RELEASE_VERSION} has no annotation body; falling back to generated notes only."
+            : > release_notes.md
+          fi
+
+          {
+            echo
+            echo '## Install'
+            echo
+            echo '```sh'
+            echo 'brew install shipitswifty/tap/google-play-store-mcp'
+            echo '```'
+            echo
+            echo 'Or add the library:'
+            echo
+            echo '```swift'
+            echo ".package(url: \"https://github.com/${{ github.repository }}.git\", from: \"${RELEASE_VERSION}\")"
+            echo '```'
+            echo
+          } >> release_notes.md
+
+          # Append the auto-generated commit/PR list underneath the written notes.
           gh api --method POST \
             "/repos/${{ github.repository }}/releases/generate-notes" \
             -f tag_name="${RELEASE_VERSION}" \
             -f target_commitish=main \
-            --jq '.body' > release_notes.md
+            --jq '.body' >> release_notes.md
+
+          echo "--- release notes preview ---"
+          cat release_notes.md
 
       - name: Create release
         uses: softprops/action-gh-release@v3
