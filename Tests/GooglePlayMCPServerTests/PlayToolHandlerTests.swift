@@ -298,6 +298,67 @@ struct PlayToolHandlerTests {
         }
     }
 
+    @Test("play_upload_and_release rejects a fraction paired with a completed release")
+    func fractionWithCompletedRejectedViaMCP() async throws {
+        let provider = stubClientProvider { _ in (200, #"{"id":"e1"}"#) }
+
+        do {
+            _ = try await PlayTools.call(
+                name: "play_upload_and_release",
+                arguments: [
+                    "packageName": .string("com.example.app"),
+                    "track": .string("production"),
+                    "aabPath": .string("/nonexistent/app.aab"),
+                    "status": .string("completed"),
+                    "userFraction": .double(0.5),
+                ],
+                writesEnabled: true, clientProvider: provider)
+            Issue.record("Expected the completed+fraction pairing to be rejected")
+        } catch let error as GoogleAPIError {
+            // The agent must be told why, not just that it failed — otherwise it retries blindly.
+            #expect(error.localizedDescription.contains("staged"))
+        }
+    }
+
+    @Test("play_upload_and_release rejects an inProgress release with no fraction")
+    func stagedWithoutFractionRejectedViaMCP() async throws {
+        let provider = stubClientProvider { _ in (200, #"{"id":"e1"}"#) }
+
+        do {
+            _ = try await PlayTools.call(
+                name: "play_upload_and_release",
+                arguments: [
+                    "packageName": .string("com.example.app"),
+                    "track": .string("production"),
+                    "aabPath": .string("/nonexistent/app.aab"),
+                    "status": .string("inProgress"),
+                ],
+                writesEnabled: true, clientProvider: provider)
+            Issue.record("Expected a staged release with no fraction to be rejected")
+        } catch let error as GoogleAPIError {
+            #expect(error.localizedDescription.contains("userFraction"))
+        }
+    }
+
+    @Test("play_update_rollout rejects a boundary fraction with an actionable message")
+    func boundaryFractionRejectedViaMCP() async throws {
+        let provider = stubClientProvider { _ in (200, #"{"id":"e1"}"#) }
+
+        do {
+            _ = try await PlayTools.call(
+                name: "play_update_rollout",
+                arguments: [
+                    "packageName": .string("com.example.app"),
+                    "track": .string("production"),
+                    "userFraction": .double(1.0),
+                ],
+                writesEnabled: true, clientProvider: provider)
+            Issue.record("Expected 1.0 to be rejected as out of Play's exclusive range")
+        } catch let error as GoogleAPIError {
+            #expect(error.localizedDescription.contains("completed"))
+        }
+    }
+
     @Test("play_upload_and_release surfaces a missing artifact as a readable error")
     func missingArtifactSurfaces() async throws {
         let provider = stubClientProvider { _ in (200, #"{"id":"e1"}"#) }
