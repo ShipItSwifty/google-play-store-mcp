@@ -160,6 +160,19 @@ scripts/coverage-gate.sh
 xcrun swift-format lint --recursive --strict --configuration .swift-format Sources Tests
 ```
 
+### Live tests
+
+The default run is fully mocked. To check the client against a real Play Console account
+(read-only — it creates and deletes throwaway edits, and publishes nothing):
+
+```bash
+GOOGLE_PLAY_TEST_PACKAGE_NAME=com.example.app \
+GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH=./service-account.json \
+  swift test --filter LiveGooglePlayTests
+```
+
+It skips when those are unset.
+
 ### Coverage
 
 `scripts/coverage-gate.sh` enforces a line-coverage floor (`MIN_LINE_COVERAGE`, default 85) over

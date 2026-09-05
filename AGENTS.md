@@ -75,6 +75,24 @@ swift build --product google-play-store-mcp
 } | .build/debug/google-play-store-mcp
 ```
 
+## Vetting a release against a real account
+
+Everything in the default test run uses mocked HTTP, which proves request shapes and the edit
+lifecycle but not that Google accepts them. `Tests/GooglePlayKitTests/LiveIntegrationTests.swift`
+closes that gap and is the intended pre-tag check. It is **read-only** — the only writes are the
+throwaway edits Play requires for reads, each of which is deleted.
+
+```bash
+GOOGLE_PLAY_TEST_PACKAGE_NAME=com.example.app \
+GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH=./service-account.json \
+  swift test --filter LiveGooglePlayTests
+```
+
+Without both variables the suite skips with a message naming what is missing, so CI stays green
+without credentials. Run it before tagging; the write paths (`uploadAndRelease`, `updateRollout`,
+`haltRollout`) still have no live coverage and must be exercised by hand against a throwaway app
+before they can be called vetted.
+
 ## Conventions
 
 - Tags and versions are **bare SemVer, no `v` prefix** (`0.1.0`, not `v0.1.0`).
