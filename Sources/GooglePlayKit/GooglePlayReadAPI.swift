@@ -159,14 +159,19 @@ extension GooglePlayClient {
         do {
             let current: GooglePlayTrack = try await get(
                 "/applications/\(packageName)/edits/\(edit.id)/tracks/\(track)")
-            guard let inProgress = current.releases?.first(where: { $0.status == .inProgress }) else {
+            let releases = current.releases ?? []
+            guard releases.contains(where: { $0.status == .inProgress }) else {
                 throw GoogleAPIError.invalidConfiguration(
                     reason: "Google Play: track '\(track)' has no in-progress release to update")
             }
+            // PUT replaces the whole releases array, so every other release has to be sent back
+            // untouched. A track routinely carries a completed release alongside an in-progress
+            // staged rollout; sending only the transformed one would silently delete the rest.
+            let rewritten = releases.map { $0.status == .inProgress ? transform($0) : $0 }
             let updated = try await setTrack(
                 packageName: packageName,
                 editId: edit.id,
-                track: GooglePlayTrack(track: track, releases: [transform(inProgress)])
+                track: GooglePlayTrack(track: track, releases: rewritten)
             )
             try await commitEdit(packageName: packageName, editId: edit.id)
             return updated
@@ -191,7 +196,10 @@ extension GooglePlayClient {
     ) async throws -> [GooglePlayReview] {
         var path = "/applications/\(packageName)/reviews?maxResults=\(maxResults)"
         if let translationLanguage, !translationLanguage.isEmpty {
-            path += "&translationLanguage=\(translationLanguage)"
+            let encoded =
+                translationLanguage.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+                ?? translationLanguage
+            path += "&translationLanguage=\(encoded)"
         }
         let response: GooglePlayReviewsResponse = try await get(path)
         return response.reviews ?? []

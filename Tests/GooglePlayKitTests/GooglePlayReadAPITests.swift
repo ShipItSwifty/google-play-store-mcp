@@ -175,6 +175,73 @@ struct GooglePlayReadAPITests {
         #expect(!body.contains("userFraction"))
     }
 
+    @Test("updateRollout preserves the other releases on the track")
+    func updateRolloutKeepsSiblingReleases() async throws {
+        // A track routinely carries a completed release (older device configs) alongside the
+        // in-progress staged rollout. PUT replaces the whole array, so both must be sent back.
+        let (client, sessionID) = makeClient { request in
+            let path = request.url?.path ?? ""
+            if request.httpMethod == "POST", path.hasSuffix("/edits") { return .json(#"{"id":"edit-6"}"#) }
+            if request.httpMethod == "GET" {
+                return .json(
+                    """
+                    {"track":"production","releases":[
+                      {"versionCodes":["400"],"status":"completed"},
+                      {"versionCodes":["412"],"status":"inProgress","userFraction":0.1}
+                    ]}
+                    """)
+            }
+            if request.httpMethod == "PUT" { return .json(#"{"track":"production"}"#) }
+            return .json(#"{"id":"edit-6"}"#)
+        }
+
+        _ = try await client.updateRollout(
+            packageName: "com.example.app", track: "production", userFraction: 0.5)
+
+        let put = try #require(MockURLProtocol.requests(for: sessionID).first { $0.method == "PUT" })
+        let body = try #require(put.body.map { String(decoding: $0, as: UTF8.self) })
+        #expect(body.contains("400"), "the completed release must survive the rollout change")
+        #expect(body.contains("412"))
+        #expect(body.contains("0.5"))
+    }
+
+    @Test("haltRollout preserves the other releases on the track")
+    func haltRolloutKeepsSiblingReleases() async throws {
+        let (client, sessionID) = makeClient { request in
+            let path = request.url?.path ?? ""
+            if request.httpMethod == "POST", path.hasSuffix("/edits") { return .json(#"{"id":"edit-7"}"#) }
+            if request.httpMethod == "GET" {
+                return .json(
+                    """
+                    {"track":"production","releases":[
+                      {"versionCodes":["400"],"status":"completed"},
+                      {"versionCodes":["412"],"status":"inProgress","userFraction":0.3}
+                    ]}
+                    """)
+            }
+            if request.httpMethod == "PUT" { return .json(#"{"track":"production"}"#) }
+            return .json(#"{"id":"edit-7"}"#)
+        }
+
+        _ = try await client.haltRollout(packageName: "com.example.app", track: "production")
+
+        let put = try #require(MockURLProtocol.requests(for: sessionID).first { $0.method == "PUT" })
+        let body = try #require(put.body.map { String(decoding: $0, as: UTF8.self) })
+        #expect(body.contains("400"), "the completed release must survive the halt")
+        #expect(body.contains("halted"))
+    }
+
+    @Test("a translation language is percent-encoded into the reviews query")
+    func reviewTranslationLanguageIsEncoded() async throws {
+        let (client, sessionID) = makeClient { _ in .json(#"{"reviews":[]}"#) }
+
+        _ = try await client.listReviews(
+            packageName: "com.example.app", maxResults: 5, translationLanguage: "pt BR")
+
+        let query = try #require(MockURLProtocol.requests(for: sessionID).first?.query)
+        #expect(query.contains("translationLanguage=pt%20BR"))
+    }
+
     @Test("updateRollout fails when the track has no in-progress release")
     func updateRolloutRequiresInProgressRelease() async throws {
         let (client, sessionID) = makeClient { request in
