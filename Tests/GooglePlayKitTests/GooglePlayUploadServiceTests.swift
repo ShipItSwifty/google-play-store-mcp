@@ -107,8 +107,38 @@ struct GooglePlayUploadServiceTests {
         #expect(!requests.contains { $0.path.hasSuffix(":commit") })
     }
 
-    @Test("userFraction is dropped unless the release is inProgress")
-    func userFractionOnlyOnStagedRollout() async throws {
+    @Test("a fraction paired with a completed release is rejected, not silently dropped")
+    func fractionWithCompletedIsRejected() async throws {
+        let (path, directory) = try makeTempArtifact(named: "app-release.aab")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let (client, sessionID) = makeClient { _ in .json(#"{"id":"e"}"#) }
+        let uploader = GooglePlayUploadService(client: client, packageName: "com.example.app")
+
+        // Dropping it silently would ship to 100% of users while reporting success to a caller
+        // who asked for 50% — the worst possible outcome, so this must fail loudly.
+        await #expect(throws: GoogleAPIError.self) {
+            try await uploader.uploadAndRelease(
+                aabPath: path, track: "internal", status: .completed, userFraction: 0.5)
+        }
+        #expect(MockURLProtocol.requests(for: sessionID).isEmpty, "must fail before any network call")
+    }
+
+    @Test("an inProgress release with no fraction is rejected before uploading")
+    func stagedReleaseRequiresFraction() async throws {
+        let (path, directory) = try makeTempArtifact(named: "app-release.aab")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let (client, sessionID) = makeClient { _ in .json(#"{"id":"e"}"#) }
+        let uploader = GooglePlayUploadService(client: client, packageName: "com.example.app")
+
+        await #expect(throws: GoogleAPIError.self) {
+            try await uploader.uploadAndRelease(
+                aabPath: path, track: "internal", status: .inProgress, userFraction: nil)
+        }
+        #expect(MockURLProtocol.requests(for: sessionID).isEmpty)
+    }
+
+    @Test("a staged rollout sends its fraction through", arguments: [0.01, 0.5, 0.99])
+    func stagedRolloutSendsFraction(fraction: Double) async throws {
         let (path, directory) = try makeTempArtifact(named: "app-release.aab")
         defer { try? FileManager.default.removeItem(at: directory) }
 
@@ -120,13 +150,26 @@ struct GooglePlayUploadServiceTests {
         }
 
         let uploader = GooglePlayUploadService(client: client, packageName: "com.example.app")
-        // .completed with a fraction is the mistake this guards: Play rejects the pair.
         try await uploader.uploadAndRelease(
-            aabPath: path, track: "internal", status: .completed, userFraction: 0.5)
+            aabPath: path, track: "internal", status: .inProgress, userFraction: fraction)
 
         let put = try #require(MockURLProtocol.requests(for: sessionID).first { $0.method == "PUT" })
         let body = try #require(put.body.map { String(decoding: $0, as: UTF8.self) })
-        #expect(!body.contains("userFraction"))
+        #expect(body.contains("userFraction"))
+        #expect(body.contains("inProgress"))
+    }
+
+    @Test("a boundary fraction is rejected", arguments: [0.0, 1.0, -0.5, 2.0])
+    func boundaryFractionRejected(fraction: Double) async throws {
+        let (path, directory) = try makeTempArtifact(named: "app-release.aab")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let (client, _) = makeClient { _ in .json(#"{"id":"e"}"#) }
+        let uploader = GooglePlayUploadService(client: client, packageName: "com.example.app")
+
+        await #expect(throws: GoogleAPIError.self) {
+            try await uploader.uploadAndRelease(
+                aabPath: path, track: "internal", status: .inProgress, userFraction: fraction)
+        }
     }
 
     @Test("an APK upload posts to /apks with the package-archive content type")

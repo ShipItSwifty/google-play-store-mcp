@@ -68,6 +68,7 @@ public struct GooglePlayUploadService: Sendable {
             throw GoogleAPIError.invalidConfiguration(
                 reason: "GooglePlayUploadService: provide either aabPath or apkPath, not both")
         }
+        try Self.validateRollout(status: status, userFraction: userFraction)
 
         // Read the artifact before creating an edit: validates existence, and a missing file
         // then fails without leaving an orphaned edit behind in the Play Console.
@@ -125,6 +126,46 @@ public struct GooglePlayUploadService: Sendable {
             logger.info("Discarding Play Store edit \(edit.id) after a failed upload")
             try? await client.deleteEdit(packageName: packageName, editId: edit.id)
             throw error
+        }
+    }
+
+    // MARK: - Validation
+
+    /// Checks the status/fraction pairing before any network call.
+    ///
+    /// Both directions matter. A staged release with no fraction is rejected by Play with an
+    /// opaque 400, and a fraction supplied alongside a `.completed` release used to be dropped
+    /// silently — meaning a caller who asked for a 50% rollout shipped to 100% of users and got
+    /// a success back. Failing loudly is the only safe answer to that second case.
+    static func validateRollout(status: GooglePlayReleaseStatus, userFraction: Double?) throws {
+        let isStaged = status == .inProgress || status == .halted
+
+        if let userFraction {
+            guard isStaged else {
+                throw GoogleAPIError.invalidConfiguration(
+                    reason: """
+                        Google Play: userFraction is only valid on a staged release (inProgress or \
+                        halted), but status is '\(status.rawValue)'. Drop the fraction, or use \
+                        status inProgress to stage the rollout.
+                        """
+                )
+            }
+            guard userFraction > 0, userFraction < 1 else {
+                throw GoogleAPIError.invalidConfiguration(
+                    reason: """
+                        Google Play: userFraction must be greater than 0 and less than 1 \
+                        (exclusive), got \(userFraction). Use status completed for a full rollout.
+                        """
+                )
+            }
+        } else if status == .inProgress {
+            throw GoogleAPIError.invalidConfiguration(
+                reason: """
+                    Google Play: status inProgress stages a partial rollout and requires a \
+                    userFraction between 0 and 1 (exclusive). Use status completed to release to \
+                    every user.
+                    """
+            )
         }
     }
 
