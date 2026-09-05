@@ -84,7 +84,11 @@ public struct GooglePlayRelease: Codable, Sendable {
     /// Internal name for this release (optional, used in Play Console UI).
     public let name: String?
     /// Version codes included in this release.
-    public let versionCodes: [String]
+    ///
+    /// Absent on a draft release that has no artifact attached yet — a normal state Play returns
+    /// for an untouched track — so this is optional. It stays absent when re-encoded, which
+    /// matters because the rollout helpers send sibling releases back verbatim.
+    public let versionCodes: [String]?
     /// Release status.
     public let status: GooglePlayReleaseStatus
     /// Staged rollout fraction (0.0–1.0). Only meaningful for `.inProgress`.
@@ -94,7 +98,7 @@ public struct GooglePlayRelease: Codable, Sendable {
 
     public init(
         name: String? = nil,
-        versionCodes: [String],
+        versionCodes: [String]? = nil,
         status: GooglePlayReleaseStatus,
         userFraction: Double? = nil,
         releaseNotes: [GooglePlayReleaseNote]? = nil

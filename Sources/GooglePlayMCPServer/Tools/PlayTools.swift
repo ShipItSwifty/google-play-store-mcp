@@ -292,7 +292,12 @@ enum PlayTools {
             }
             for release in releases {
                 var parts = ["- \(track.track): \(release.status.rawValue)"]
-                parts.append("versionCodes=[\(release.versionCodes.joined(separator: ", "))]")
+                // A draft release can carry no version codes at all; say so rather than "[]".
+                if let codes = release.versionCodes, !codes.isEmpty {
+                    parts.append("versionCodes=[\(codes.joined(separator: ", "))]")
+                } else {
+                    parts.append("no version codes")
+                }
                 if let fraction = release.userFraction {
                     parts.append("rollout=\(Int((fraction * 100).rounded()))%")
                 }

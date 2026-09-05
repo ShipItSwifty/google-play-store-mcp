@@ -61,6 +61,38 @@ struct GooglePlayReadAPITests {
         #expect(!requests.contains { $0.path.contains(":commit") })
     }
 
+    @Test("a draft release with no versionCodes decodes, as Play really returns it")
+    func draftReleaseWithoutVersionCodesDecodes() async throws {
+        // Verbatim shape from a live tracks.list: an untouched production track has no releases
+        // key at all, and a beta track can hold a draft release with neither name nor
+        // versionCodes. Requiring versionCodes made one draft release fail the whole call.
+        let (client, _) = makeClient { request in
+            let path = request.url?.path ?? ""
+            if request.httpMethod == "POST", path.hasSuffix("/edits") { return .json(#"{"id":"e1"}"#) }
+            if request.httpMethod == "DELETE" { return .empty() }
+            return .json(
+                """
+                {"kind":"androidpublisher#tracksListResponse","tracks":[
+                  {"track":"production"},
+                  {"track":"beta","releases":[{"status":"draft"}]},
+                  {"track":"alpha","releases":[{"name":"0.1.0","versionCodes":["17"],"status":"completed"}]}
+                ]}
+                """)
+        }
+
+        let tracks = try await client.listTracks(packageName: "com.example.app")
+
+        #expect(tracks.count == 3)
+        let production = try #require(tracks.first { $0.track == "production" })
+        #expect(production.releases == nil)
+        let beta = try #require(tracks.first { $0.track == "beta" })
+        let draft = try #require(beta.releases?.first)
+        #expect(draft.status == .draft)
+        #expect(draft.versionCodes == nil)
+        let alpha = try #require(tracks.first { $0.track == "alpha" })
+        #expect(alpha.releases?.first?.versionCodes == ["17"])
+    }
+
     @Test("withReadOnlyEdit deletes the edit even when the read throws")
     func readOnlyEditCleansUpOnFailure() async throws {
         let (client, sessionID) = makeClient { request in
