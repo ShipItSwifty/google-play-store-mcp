@@ -32,7 +32,7 @@ jobs:
     name: Build macOS Universal Binary
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
           ref: ${{ env.RELEASE_VERSION }}
@@ -51,7 +51,7 @@ jobs:
       # the compiled build products for both arches. Keyed on the pin file so a
       # dependency bump busts the cache.
       - name: Cache SwiftPM
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             .build
@@ -86,7 +86,7 @@ jobs:
           echo "TARBALL=google-play-store-mcp-${RELEASE_VERSION}-macos-universal.tar.gz" >> "$GITHUB_ENV"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: macos-universal
           path: ${{ env.TARBALL }}
@@ -98,7 +98,7 @@ jobs:
     container:
       image: swift:6.3-noble
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
           ref: ${{ env.RELEASE_VERSION }}
@@ -114,7 +114,7 @@ jobs:
         run: swift --version
 
       - name: Cache SwiftPM
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             .build
@@ -137,7 +137,7 @@ jobs:
           echo "TARBALL=google-play-store-mcp-${RELEASE_VERSION}-linux-x86_64.tar.gz" >> "$GITHUB_ENV"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: linux-x86_64
           path: ${{ env.TARBALL }}
@@ -152,18 +152,18 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
           ref: ${{ env.RELEASE_VERSION }}
 
       - name: Download macOS artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: macos-universal
 
       - name: Download Linux artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: linux-x86_64
 
@@ -173,7 +173,7 @@ jobs:
             > "google-play-store-mcp-${RELEASE_VERSION}-checksums.txt"
 
       - name: Attest release archives
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: 'google-play-store-mcp-*.tar.gz'
 
@@ -188,7 +188,7 @@ jobs:
             --jq '.body' > release_notes.md
 
       - name: Create release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.RELEASE_VERSION }}
           body_path: release_notes.md
