@@ -12,7 +12,7 @@ Three products in one package:
   Depends on `GoogleAuthKit`.
 - **`google-play-store-mcp`** — MCP server over stdio, read-only unless `GOOGLE_PLAY_ENABLE_WRITES=1`.
 
-Extracted from [ShipItSwifty](https://github.com/maniramezan/ShipItSwifty), which consumes
+Extracted from [ShipItSwifty](https://github.com/ShipItSwifty/shipitswifty), which consumes
 `GoogleAuthKit` + `GooglePlayKit` and maps `GoogleAPIError` onto its own `ShipItError`.
 
 ## Read first on a cold start

@@ -16,7 +16,7 @@ Cross-platform (macOS and Linux) — everything is `Foundation` + `swift-crypto`
 ## Install (library)
 
 ```swift
-.package(url: "https://github.com/maniramezan/google-play-store-mcp.git", from: "0.1.0")
+.package(url: "https://github.com/ShipItSwifty/google-play-store-mcp.git", from: "0.1.0")
 ```
 
 ```swift
@@ -175,8 +175,8 @@ It skips when those are unset.
 
 ### Coverage
 
-`scripts/coverage-gate.sh` enforces a line-coverage floor (`MIN_LINE_COVERAGE`, default 85) over
-product code only. CI runs it on every push.
+`scripts/coverage-gate.sh` enforces a line-coverage floor over product code only. CI sets
+`MIN_LINE_COVERAGE: "78"`; actual coverage is ~81%. Raise the floor as coverage climbs.
 
 ## Releasing
 
