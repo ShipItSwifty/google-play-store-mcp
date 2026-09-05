@@ -120,6 +120,20 @@ production rollout.
 | `play_halt_rollout` | ❌ | Halt an in-progress rollout |
 | `play_upload_data_safety_labels` | ❌ | Upload a Safety Labels CSV |
 
+#### Verification status
+
+The read tools are verified against a live Play Console account: authentication, tracks,
+bundles, APKs, reviews, and a throwaway edit created and confirmed deleted. `play_update_rollout`
+and `play_halt_rollout` have their request encoding verified live (a track `PUT` plus Play's
+pre-commit validation, inside an edit that is deleted rather than committed), and their refusal
+path checked against a real track.
+
+**Not yet verified against a live account:** `play_upload_and_release` end to end, and advancing
+or halting a *real* staged rollout. Both need an app with a publishable artifact, so they are
+currently proven only against mocked HTTP. Treat them accordingly.
+
+Run the live suite yourself — see [Live tests](#live-tests).
+
 #### What the Play API cannot do
 
 `applications.dataSafety` is **write-only**. There is no endpoint that reads back the current
@@ -196,7 +210,9 @@ GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH=./service-account.json \
   swift test --filter LiveGooglePlayTests
 ```
 
-It skips when those are unset.
+It skips when those are unset. Adding `GOOGLE_PLAY_LIVE_WRITE_TESTS=1` additionally exercises the
+write encoding — a track `PUT` and Play's pre-commit validation, inside an edit that is deleted
+rather than committed, so the app does not change. No test uploads an artifact or commits an edit.
 
 ### Coverage
 
