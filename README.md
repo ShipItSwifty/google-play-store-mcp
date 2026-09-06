@@ -107,30 +107,36 @@ Read tools are always advertised. Write tools appear only when `GOOGLE_PLAY_ENAB
 an agent exploring release state should not be one malformed argument away from changing a
 production rollout.
 
-| Tool | Reads | What it answers |
-|---|---|---|
-| `play_list_tracks` | ✅ | What is live on every track, and at what rollout percentage |
-| `play_get_track` | ✅ | The same, for one track |
-| `play_list_bundles` | ✅ | Which AABs have been uploaded |
-| `play_list_apks` | ✅ | Which APKs have been uploaded |
-| `play_list_reviews` | ✅ | Recent user reviews with rating, device, and app version |
-| `play_validate_edit` | ✅ | Would the app's current state pass Play's pre-commit checks |
-| `play_upload_and_release` | ❌ | Upload an AAB/APK and release it to a track |
-| `play_update_rollout` | ❌ | Change the staged-rollout fraction |
-| `play_halt_rollout` | ❌ | Halt an in-progress rollout |
-| `play_upload_data_safety_labels` | ❌ | Upload a Safety Labels CSV |
+Every tool is implemented. "Kind" is whether it reads or changes Play state; "Live-verified"
+is how far it has been exercised against a real Play Console account (see
+[Verification status](#verification-status)).
+
+| Tool | Kind | Live-verified | What it answers |
+|---|---|---|---|
+| `play_list_tracks` | read | yes | What is live on every track, and at what rollout percentage |
+| `play_get_track` | read | yes | The same, for one track |
+| `play_list_bundles` | read | yes | Which AABs have been uploaded |
+| `play_list_apks` | read | yes | Which APKs have been uploaded |
+| `play_list_reviews` | read | yes | Recent user reviews with rating, device, and app version |
+| `play_validate_edit` | read | yes | Would the app's current state pass Play's pre-commit checks |
+| `play_update_rollout` | write | encoding only | Change the staged-rollout fraction |
+| `play_halt_rollout` | write | encoding only | Halt an in-progress rollout |
+| `play_upload_and_release` | write | mocked only | Upload an AAB/APK and release it to a track |
+| `play_upload_data_safety_labels` | write | mocked only | Upload a Safety Labels CSV |
 
 #### Verification status
 
-The read tools are verified against a live Play Console account: authentication, tracks,
-bundles, APKs, reviews, and a throwaway edit created and confirmed deleted. `play_update_rollout`
-and `play_halt_rollout` have their request encoding verified live (a track `PUT` plus Play's
-pre-commit validation, inside an edit that is deleted rather than committed), and their refusal
-path checked against a real track.
+**yes** — verified against a live Play Console account: authentication, tracks, bundles, APKs,
+reviews, and a throwaway edit created and confirmed deleted.
 
-**Not yet verified against a live account:** `play_upload_and_release` end to end, and advancing
-or halting a *real* staged rollout. Both need an app with a publishable artifact, so they are
-currently proven only against mocked HTTP. Treat them accordingly.
+**encoding only** — `play_update_rollout` and `play_halt_rollout` have their request encoding
+verified live (a track `PUT` plus Play's pre-commit validation, inside an edit that is deleted
+rather than committed), and their refusal path checked against a real track. Advancing or halting
+a *real* staged rollout is still unproven — it needs an app with a live rollout to act on.
+
+**mocked only** — `play_upload_and_release` end to end and `play_upload_data_safety_labels` are
+proven only against mocked HTTP. Both need an app with a publishable artifact. Treat them
+accordingly.
 
 Run the live suite yourself — see [Live tests](#live-tests).
 
