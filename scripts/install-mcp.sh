@@ -38,25 +38,29 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Prefer the installed executable (including Homebrew) over checkout builds.
+# Keep the PATH symlink so Homebrew upgrades do not pin a versioned Cellar path.
 if [[ -z "$BINARY" ]]; then
-  for candidate in .build/release/google-play-store-mcp .build/debug/google-play-store-mcp; do
+  BINARY="$(command -v google-play-store-mcp || true)"
+fi
+if [[ -z "$BINARY" ]]; then
+  REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  for candidate in "$REPO_ROOT/.build/release/google-play-store-mcp" "$REPO_ROOT/.build/debug/google-play-store-mcp"; do
     if [[ -x "$candidate" ]]; then
-      BINARY="$(cd "$(dirname "$candidate")" && pwd)/$(basename "$candidate")"
+      BINARY="$candidate"
       break
     fi
   done
 fi
-
-if [[ -z "$BINARY" ]]; then
-  if command -v google-play-store-mcp >/dev/null 2>&1; then
-    BINARY="$(command -v google-play-store-mcp)"
-  else
-    echo "error: no binary found. Build it first:" >&2
-    echo "  swift build -c release --product google-play-store-mcp" >&2
-    echo "or pass --binary /path/to/google-play-store-mcp" >&2
-    exit 1
-  fi
+if [[ -z "$BINARY" || ! -x "$BINARY" ]]; then
+  echo "error: no executable found. Install google-play-store-mcp with Homebrew," >&2
+  echo "build it with swift build -c release --product google-play-store-mcp," >&2
+  echo "or pass --binary /path/to/google-play-store-mcp." >&2
+  exit 1
 fi
+# User-wide registrations must also work when launched outside this checkout.
+BINARY="$(cd "$(dirname "$BINARY")" && pwd)/$(basename "$BINARY")"
+echo "Using binary: $BINARY"
 
 confirm() {
   local prompt="$1"
@@ -148,7 +152,7 @@ install_claude_code() {
     return 1
   fi
   echo "== Claude Code =="
-  local args=(mcp add "$SERVER_NAME")
+  local args=(mcp add --scope user "$SERVER_NAME")
   if [[ -n "$SERVICE_ACCOUNT_PATH" ]]; then
     args+=(--env "GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH=$SERVICE_ACCOUNT_PATH")
   fi

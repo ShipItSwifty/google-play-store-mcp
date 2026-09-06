@@ -158,6 +158,10 @@ Supported clients: Claude Code, Codex CLI, Cursor, Windsurf.
 scripts/install-mcp.sh --service-account-path /path/to/service-account.json
 ```
 
+Registration is user-wide, available across projects (Claude Code uses `--scope user`).
+The installer prefers `--binary`, then the executable on `PATH` (including Homebrew), then
+a release/debug build in this checkout, regardless of the directory you run it from.
+
 With no `--client` flag it detects whichever of those are installed and asks before touching
 each one's config (Claude Code and Codex go through their own `mcp add` CLI; Cursor and Windsurf
 get a JSON diff, confirmation, and a timestamped backup of the file it edits). Nothing runs
