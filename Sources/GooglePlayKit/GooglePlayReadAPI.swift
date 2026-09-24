@@ -219,26 +219,69 @@ extension GooglePlayClient {
 
     // MARK: - Reviews
 
-    /// Lists recent user reviews. Play only returns reviews from the last week.
+    /// The largest page `reviews.list` is asked for. ``listReviews(packageName:maxResults:translationLanguage:)``
+    /// pages past it.
+    public static let reviewsPageLimit = 100
+
+    /// Lists recent user reviews, following Play's page tokens until `maxResults` are collected or
+    /// the reviews run out. Play only returns reviews from about the last week.
     ///
     /// - Parameters:
     ///   - packageName: The app's package name.
-    ///   - maxResults: Page size; Play caps this well below 100.
+    ///   - maxResults: The total number of reviews to return, across as many pages as that takes.
     ///   - translationLanguage: When set, Play adds a translation of each review into this language.
     public func listReviews(
         packageName: String,
         maxResults: Int = 50,
         translationLanguage: String? = nil
     ) async throws -> [GooglePlayReview] {
+        guard maxResults > 0 else { return [] }
+        var reviews: [GooglePlayReview] = []
+        var token: String?
+        var seenTokens: Set<String> = []
+        repeat {
+            let page = try await listReviewsPage(
+                packageName: packageName,
+                maxResults: min(maxResults - reviews.count, Self.reviewsPageLimit),
+                token: token,
+                translationLanguage: translationLanguage
+            )
+            let pageReviews = page.reviews ?? []
+            reviews += pageReviews
+            token = page.tokenPagination?.nextPageToken
+            // An empty page, or a token already followed, would otherwise loop forever.
+            if pageReviews.isEmpty { break }
+            if let next = token, !seenTokens.insert(next).inserted { break }
+        } while token != nil && reviews.count < maxResults
+        return Array(reviews.prefix(maxResults))
+    }
+
+    /// Fetches one page of `reviews.list`.
+    ///
+    /// Use this to drive paging yourself; ``listReviews(packageName:maxResults:translationLanguage:)``
+    /// already follows the tokens for you.
+    public func listReviewsPage(
+        packageName: String,
+        maxResults: Int,
+        token: String? = nil,
+        translationLanguage: String? = nil
+    ) async throws -> GooglePlayReviewsResponse {
         var path = "/applications/\(packageName)/reviews?maxResults=\(maxResults)"
-        if let translationLanguage, !translationLanguage.isEmpty {
-            let encoded =
-                translationLanguage.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
-                ?? translationLanguage
-            path += "&translationLanguage=\(encoded)"
+        if let token, !token.isEmpty {
+            path += "&token=\(Self.queryEncoded(token))"
         }
-        let response: GooglePlayReviewsResponse = try await get(path)
-        return response.reviews ?? []
+        if let translationLanguage, !translationLanguage.isEmpty {
+            path += "&translationLanguage=\(Self.queryEncoded(translationLanguage))"
+        }
+        return try await get(path)
+    }
+
+    /// Percent-encodes a query value, including the `&`, `=` and `+` that `.urlQueryAllowed`
+    /// leaves alone but that would split or corrupt the value — page tokens are opaque and may
+    /// contain any of them.
+    private static func queryEncoded(_ value: String) -> String {
+        let allowed = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&=+"))
+        return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
     }
 
     // MARK: - Data safety

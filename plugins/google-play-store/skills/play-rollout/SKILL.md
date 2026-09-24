@@ -22,7 +22,7 @@ a bad rollout before. Follow them in order.
 1. **Read.** Call `play_get_track` for the track. Find the `inProgress` release, its version codes,
    and its current `rollout=` percentage. If there is no `inProgress` release, say so and stop:
    there is nothing to advance or halt.
-2. **Check signal.** Call `play_list_reviews` (`maxResults: 100`) and filter to the rolling
+2. **Check signal.** Call `play_list_reviews` (`maxResults: 200`) and filter to the rolling
    version. Report the count, the average stars, and any new recurring complaint compared with the
    previous version. With fewer than ~10 reviews, say the signal is weak.
 3. **Propose.** State the exact change: `production: 10% → 25%` or `halt at 10%`. Conventional

@@ -55,6 +55,10 @@ enum PlayTools {
 
     // MARK: - Read tools
 
+    /// The most reviews one `play_list_reviews` call returns. Play's week of reviews rarely runs
+    /// past this, and it keeps a single tool result a reasonable size for the model.
+    static let maxReviews = 500
+
     private static let packageArgument = ToolArgument.string(
         "packageName", "The app's package name, e.g. com.example.app.", required: true)
 
@@ -129,19 +133,19 @@ enum PlayTools {
         ToolSpec(
             name: "play_list_reviews",
             description: """
-                List recent user reviews with star rating, device, and app version. Google only \
-                returns reviews from roughly the last week.
+                List recent user reviews with star rating, device, and app version, paging through \
+                Play's results up to maxResults. Google only returns reviews from roughly the last week.
                 """,
             arguments: [
                 packageArgument,
-                .integer("maxResults", "How many reviews to return (1-100, default 50)."),
+                .integer("maxResults", "How many reviews to return (1-\(maxReviews), default 50)."),
                 .string("translationLanguage", "BCP 47 tag to translate reviews into, e.g. en-US."),
             ]
         ) { arguments, client in
             let packageName = try arguments.require("packageName")
             let reviews = try await client().listReviews(
                 packageName: packageName,
-                maxResults: arguments.int("maxResults", default: 50),
+                maxResults: arguments.int("maxResults", default: 50, max: maxReviews),
                 translationLanguage: arguments.string("translationLanguage")
             )
             return .init(content: [.plainText(render(reviews: reviews, packageName: packageName))])
