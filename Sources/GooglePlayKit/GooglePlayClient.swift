@@ -130,33 +130,58 @@ public struct GooglePlayClient: Sendable {
         try Self.validate(response: response, data: data, path: path)
     }
 
-    /// Uploads binary data to the Play media-upload endpoint.
+    /// Uploads in-memory binary data to the Play media-upload endpoint.
+    ///
+    /// Prefer ``uploadFile(path:fileURL:contentType:)`` for artifacts on disk: this holds the whole
+    /// payload in memory.
     public func uploadBinary(path: String, data: Data, contentType: String) async throws -> Data {
-        let token = try await tokenProvider()
+        var request = try await uploadRequest(path: path, contentType: contentType)
+        request.setValue("\(data.count)", forHTTPHeaderField: "Content-Length")
+        request.httpBody = data
+
+        logger.info("Uploading \(data.count) bytes to \(path)")
+        let (responseData, response) = try await session.data(for: request)
+        return try Self.validateUpload(response: response, data: responseData, path: path)
+    }
+
+    /// Streams a file on disk to the Play media-upload endpoint.
+    ///
+    /// URLSession reads the file as it sends, so a multi-hundred-megabyte AAB never has to fit in
+    /// memory — which matters most inside a long-running MCP server.
+    public func uploadFile(path: String, fileURL: URL, contentType: String) async throws -> Data {
+        let request = try await uploadRequest(path: path, contentType: contentType)
+
+        let size = (try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? NSNumber)?.intValue
+        logger.info("Uploading \(size.map { "\($0) bytes" } ?? "file") from \(fileURL.lastPathComponent) to \(path)")
+        let (responseData, response) = try await session.upload(for: request, fromFile: fileURL)
+        return try Self.validateUpload(response: response, data: responseData, path: path)
+    }
+
+    // MARK: - Private
+
+    /// An authorized `POST` to the media-upload endpoint, with no body attached yet.
+    private func uploadRequest(path: String, contentType: String) async throws -> URLRequest {
         guard let url = URL(string: "\(Self.uploadBaseURL)\(path)?uploadType=media") else {
             throw GoogleAPIError.invalidConfiguration(reason: "Google Play: invalid upload URL for path '\(path)'")
         }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(try await tokenProvider())", forHTTPHeaderField: "Authorization")
         request.setValue(contentType, forHTTPHeaderField: "Content-Type")
-        request.setValue("\(data.count)", forHTTPHeaderField: "Content-Length")
-        request.httpBody = data
         request.timeoutInterval = 600  // 10 minutes — AAB uploads can be large
+        return request
+    }
 
-        logger.info("Uploading \(data.count) bytes to \(path)")
-        let (responseData, response) = try await session.data(for: request)
+    private static func validateUpload(response: URLResponse, data: Data, path: String) throws -> Data {
         guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             throw GoogleAPIError.uploadFailed(
                 asset: path,
-                reason: "HTTP \(status): \(String(data: responseData, encoding: .utf8) ?? "")"
+                reason: "HTTP \(status): \(String(data: data, encoding: .utf8) ?? "")"
             )
         }
-        return responseData
+        return data
     }
-
-    // MARK: - Private
 
     private func request(_ method: String, _ path: String) throws -> URLRequest {
         guard let url = URL(string: "\(Self.baseURL)\(path)") else {
