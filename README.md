@@ -176,6 +176,11 @@ On connect, the server also sends the host a short set of **instructions**: star
 are enabled. Most hosts fold these into the agent's context, so the agent does not have to learn
 them by failing a call.
 
+Every tool returns a readable text summary **and** the same data as MCP `structuredContent`
+(a JSON object such as `{"packageName": …, "tracks": [...]}`, using the Play API's own field
+names). Models read the compact text; hosts and scripts that support structured output get exact
+values without parsing it.
+
 | Tool | Kind | Live-verified | What it answers |
 |---|---|---|---|
 | `play_release_overview` | read | built from verified reads | Tracks, rollout percentages, bundles, and APKs in one call (one edit) |
