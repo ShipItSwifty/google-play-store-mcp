@@ -155,6 +155,13 @@ Read from the environment, in priority order:
 | `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH` | Path to the key file |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path to the key file (Google-wide convention) |
 
+Optional:
+
+| Variable | Meaning |
+|---|---|
+| `GOOGLE_PLAY_PACKAGE_NAME` | Package used when a tool call omits `packageName`, so a single-app setup never has to be asked for it. An explicit argument always wins. |
+| `GOOGLE_PLAY_ENABLE_WRITES` | `1` advertises the write tools (see [Tools](#tools)). |
+
 The service account needs Play Developer API access to the app, granted in the Play Console under
 **Users and permissions**. Credentials are resolved on the first tool call, so a credential problem
 is reported as a readable tool error instead of the server failing to launch. After the first
@@ -242,7 +249,8 @@ With no `--client` flag it detects whichever of those are installed and asks bef
 each one's config (Claude Code and Codex go through their own `mcp add` CLI; Cursor and Windsurf
 get a JSON diff, confirmation, and a timestamped backup of the file it edits). Nothing runs
 automatically as part of `brew install` — you run this by hand, whenever you want the server
-registered. Add `--writes` to enable the write tools, `--dry-run` to preview without writing, or
+registered. Add `--writes` to enable the write tools, `--package-name com.example.app` to set a
+default package, `--dry-run` to preview without writing, or
 `--client <name>` to target one client. See `scripts/install-mcp.sh --help` for all options.
 
 To register by hand instead, the config shape is the same for every client except Codex (which

@@ -40,6 +40,7 @@ struct GooglePlayMCP {
         log.logLevel = .info
 
         let writesEnabled = PlayTools.writesEnabled()
+        let defaultPackageName = PlayTools.defaultPackageName()
 
         // One client for the life of the process, so its OAuth2 token is reused across calls.
         let clients = CachedClientProvider(Self.makeClient)
@@ -47,7 +48,7 @@ struct GooglePlayMCP {
         let server = Server(
             name: "google-play-store-mcp",
             version: GooglePlayMCPVersion.current,
-            instructions: Self.instructions(writesEnabled: writesEnabled),
+            instructions: Self.instructions(writesEnabled: writesEnabled, defaultPackageName: defaultPackageName),
             capabilities: .init(tools: .init(listChanged: false))
         )
 
@@ -61,6 +62,7 @@ struct GooglePlayMCP {
                     name: params.name,
                     arguments: params.arguments ?? [:],
                     writesEnabled: writesEnabled,
+                    defaultPackageName: defaultPackageName,
                     clientProvider: { try clients.client() }
                 )
             } catch let error as GoogleAPIError {
@@ -101,7 +103,7 @@ struct GooglePlayMCP {
     /// Guidance sent to the host in the `initialize` response, which most hosts fold into the
     /// agent's context. It carries what the tool descriptions cannot: how the tools fit together,
     /// and the Play API constraints an agent would otherwise learn by failing a call.
-    static func instructions(writesEnabled: Bool) -> String {
+    static func instructions(writesEnabled: Bool, defaultPackageName: String? = nil) -> String {
         let writes =
             writesEnabled
             ? """
@@ -115,8 +117,12 @@ struct GooglePlayMCP {
             If the user asks to release or change a rollout, tell them to enable writes rather than \
             looking for a workaround.
             """
+        let package =
+            defaultPackageName.map {
+                "Every tool takes the app's packageName; when omitted it defaults to \($0)."
+            } ?? "Every tool takes the app's packageName (e.g. com.example.app)."
         return """
-            Google Play Developer API tools. Every tool takes the app's packageName (e.g. com.example.app).
+            Google Play Developer API tools. \(package)
             Start with play_release_overview: it returns tracks, rollout fractions, bundles, and APKs in one \
             call. Use play_get_track when only one track matters. Each edit-scoped read opens and deletes a \
             throwaway Play edit, so prefer one overview call over several list calls.
@@ -139,6 +145,9 @@ struct GooglePlayMCP {
           GOOGLE_PLAY_SERVICE_ACCOUNT_JSON        Raw service account key JSON.
           GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH   Path to the key file.
           GOOGLE_APPLICATION_CREDENTIALS          Path to the key file (Google-wide convention).
+
+        Optional: GOOGLE_PLAY_PACKAGE_NAME sets the package used when a tool call omits
+        packageName. An explicit packageName argument always wins.
 
         Optional: GOOGLE_PLAY_ENABLE_WRITES=1 additionally advertises the write tools
         (upload and release, update or halt a staged rollout, upload Data safety labels).

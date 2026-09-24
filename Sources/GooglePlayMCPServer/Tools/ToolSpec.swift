@@ -49,9 +49,26 @@ struct ToolArgument: Sendable {
 /// Typed access to the arguments of one tool call.
 struct ToolArguments: Sendable {
     private let values: [String: Value]
+    private let defaultPackageName: String?
 
-    init(_ values: [String: Value]) {
+    init(_ values: [String: Value], defaultPackageName: String? = nil) {
         self.values = values
+        self.defaultPackageName = defaultPackageName
+    }
+
+    /// The `packageName` argument, or the server's configured default when the call omits it.
+    ///
+    /// An explicit argument always wins, so an agent can still reach a second app in a session
+    /// configured for the first.
+    func packageName() throws -> String {
+        if let explicit = string("packageName") { return explicit }
+        if let defaultPackageName { return defaultPackageName }
+        throw GoogleAPIError.invalidConfiguration(
+            reason: """
+                Missing required argument 'packageName'. Pass it, or set GOOGLE_PLAY_PACKAGE_NAME in the \
+                server's environment to default it.
+                """
+        )
     }
 
     /// A required string argument.
