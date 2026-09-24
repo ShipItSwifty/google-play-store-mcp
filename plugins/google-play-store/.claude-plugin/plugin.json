@@ -1,0 +1,13 @@
+{
+  "name": "google-play-store",
+  "displayName": "Google Play Store",
+  "description": "Inspect Play tracks, staged rollouts, uploaded artifacts, and recent reviews, and drive a staged rollout safely.",
+  "author": {
+    "name": "ShipItSwifty",
+    "url": "https://github.com/ShipItSwifty"
+  },
+  "homepage": "https://github.com/ShipItSwifty/google-play-store-mcp",
+  "repository": "https://github.com/ShipItSwifty/google-play-store-mcp",
+  "license": "MIT",
+  "keywords": ["android", "google-play", "release", "mcp"]
+}

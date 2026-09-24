@@ -12,6 +12,10 @@ Three products in one package:
   Depends on `GoogleAuthKit`.
 - **`google-play-store-mcp`** — MCP server over stdio, read-only unless `GOOGLE_PLAY_ENABLE_WRITES=1`.
 
+The repo also ships a Claude Code plugin (`.claude-plugin/marketplace.json` →
+`plugins/google-play-store/`). It registers the server by name and carries workflow skills
+(`skills/*/SKILL.md`) that teach an agent how to combine the tools.
+
 Extracted from [ShipItSwifty](https://github.com/ShipItSwifty/shipitswifty), which consumes
 `GoogleAuthKit` + `GooglePlayKit` and maps `GoogleAPIError` onto its own `ShipItError`.
 
@@ -39,6 +43,12 @@ Extracted from [ShipItSwifty](https://github.com/ShipItSwifty/shipitswifty), whi
    `.inProgress` *and* `.halted`, and requires `0 < userFraction < 1` — a full rollout is a
    `.completed` release, not `1.0`. `assignToTrack` strips it on `.completed`/`.draft`;
    `haltRollout` preserves it so the pause point survives.
+7. **The server reuses one client per process.** `CachedClientProvider` memoizes the first
+   *successful* `makeClient()` so the JWT generator's token cache survives across tool calls.
+   Never construct a `GooglePlayClient` inside a tool handler; use the provider it is given.
+8. **Batch edit-scoped reads.** Each edit-scoped read costs an edit create and delete. When a tool
+   needs several of them, do them inside one `withReadOnlyEdit` (concurrently with `async let`,
+   as `releaseOverview` does) rather than calling several `list*` helpers.
 
 ## Adding an MCP tool
 
@@ -52,6 +62,9 @@ Extracted from [ShipItSwifty](https://github.com/ShipItSwifty/shipitswifty), whi
 4. Add tests in `Tests/GooglePlayMCPServerTests/PlayToolsTests.swift`. The catalog tests
    (uniqueness, gating, required arguments) cover new tools automatically.
 5. Update the tool table in `README.md`.
+6. If the tool changes how an agent should sequence calls, update `GooglePlayMCP.instructions`
+   in `Entry.swift` (a test checks that every `play_*` name it mentions exists) and any skill
+   under `plugins/google-play-store/skills/` that should use it.
 
 ## API limitations worth knowing before promising anything
 

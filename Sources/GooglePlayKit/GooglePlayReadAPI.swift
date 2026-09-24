@@ -69,9 +69,7 @@ extension GooglePlayClient {
     /// This is the "what is live, and at what rollout percentage" question.
     public func listTracks(packageName: String) async throws -> [GooglePlayTrack] {
         try await withReadOnlyEdit(packageName: packageName) { editId in
-            let response: GooglePlayTracksResponse = try await get(
-                "/applications/\(packageName)/edits/\(editId)/tracks")
-            return response.tracks ?? []
+            try await fetchTracks(packageName: packageName, editId: editId)
         }
     }
 
@@ -85,18 +83,47 @@ extension GooglePlayClient {
     /// Lists the Android App Bundles uploaded to the app.
     public func listBundles(packageName: String) async throws -> [GooglePlayBundle] {
         try await withReadOnlyEdit(packageName: packageName) { editId in
-            let response: GooglePlayBundlesResponse = try await get(
-                "/applications/\(packageName)/edits/\(editId)/bundles")
-            return response.bundles ?? []
+            try await fetchBundles(packageName: packageName, editId: editId)
         }
     }
 
     /// Lists the APKs uploaded to the app.
     public func listApks(packageName: String) async throws -> [GooglePlayApk] {
         try await withReadOnlyEdit(packageName: packageName) { editId in
-            let response: GooglePlayApksResponse = try await get("/applications/\(packageName)/edits/\(editId)/apks")
-            return response.apks ?? []
+            try await fetchApks(packageName: packageName, editId: editId)
         }
+    }
+
+    /// Reads tracks, bundles, and APKs together, inside one throwaway edit.
+    ///
+    /// Equivalent to calling ``listTracks(packageName:)``, ``listBundles(packageName:)`` and
+    /// ``listApks(packageName:)``, but it opens and deletes one edit instead of three and issues
+    /// the three reads concurrently — three round-trip latencies (create, reads, delete) instead
+    /// of nine.
+    public func releaseOverview(packageName: String) async throws -> GooglePlayReleaseOverview {
+        try await withReadOnlyEdit(packageName: packageName) { editId in
+            async let tracks = fetchTracks(packageName: packageName, editId: editId)
+            async let bundles = fetchBundles(packageName: packageName, editId: editId)
+            async let apks = fetchApks(packageName: packageName, editId: editId)
+            return GooglePlayReleaseOverview(tracks: try await tracks, bundles: try await bundles, apks: try await apks)
+        }
+    }
+
+    // Edit-scoped fetches, shared by the single-purpose reads and the overview.
+
+    private func fetchTracks(packageName: String, editId: String) async throws -> [GooglePlayTrack] {
+        let response: GooglePlayTracksResponse = try await get("/applications/\(packageName)/edits/\(editId)/tracks")
+        return response.tracks ?? []
+    }
+
+    private func fetchBundles(packageName: String, editId: String) async throws -> [GooglePlayBundle] {
+        let response: GooglePlayBundlesResponse = try await get("/applications/\(packageName)/edits/\(editId)/bundles")
+        return response.bundles ?? []
+    }
+
+    private func fetchApks(packageName: String, editId: String) async throws -> [GooglePlayApk] {
+        let response: GooglePlayApksResponse = try await get("/applications/\(packageName)/edits/\(editId)/apks")
+        return response.apks ?? []
     }
 
     // MARK: - Rollout control

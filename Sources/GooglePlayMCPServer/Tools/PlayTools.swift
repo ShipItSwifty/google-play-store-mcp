@@ -60,6 +60,26 @@ enum PlayTools {
 
     static let readSpecs: [ToolSpec] = [
         ToolSpec(
+            name: "play_release_overview",
+            description: """
+                One-call release snapshot for an app: every track with its releases and rollout \
+                percentage, plus the uploaded bundles and APKs. Reads all three from a single \
+                throwaway edit, so prefer it over calling play_list_tracks, play_list_bundles, and \
+                play_list_apks separately.
+                """,
+            arguments: [packageArgument]
+        ) { arguments, client in
+            let packageName = try arguments.require("packageName")
+            let overview = try await client().releaseOverview(packageName: packageName)
+            let sections = [
+                render(tracks: overview.tracks, packageName: packageName),
+                render(bundles: overview.bundles, packageName: packageName),
+                render(apks: overview.apks, packageName: packageName),
+            ]
+            return .init(content: [.plainText(sections.joined(separator: "\n\n"))])
+        },
+
+        ToolSpec(
             name: "play_list_tracks",
             description: """
                 List every Play Store track for an app with its current releases — version codes, \
@@ -93,11 +113,7 @@ enum PlayTools {
         ) { arguments, client in
             let packageName = try arguments.require("packageName")
             let bundles = try await client().listBundles(packageName: packageName)
-            guard !bundles.isEmpty else {
-                return .init(content: [.plainText("No bundles uploaded for \(packageName).")])
-            }
-            let lines = bundles.map { "versionCode \($0.versionCode)  sha256=\($0.sha256 ?? "—")" }
-            return .init(content: [.plainText("Bundles for \(packageName):\n" + lines.joined(separator: "\n"))])
+            return .init(content: [.plainText(render(bundles: bundles, packageName: packageName))])
         },
 
         ToolSpec(
@@ -107,13 +123,7 @@ enum PlayTools {
         ) { arguments, client in
             let packageName = try arguments.require("packageName")
             let apks = try await client().listApks(packageName: packageName)
-            guard !apks.isEmpty else {
-                return .init(content: [.plainText("No APKs uploaded for \(packageName).")])
-            }
-            let lines = apks.map { apk in
-                "versionCode \(apk.versionCode)  sha256=\(apk.sha256 ?? apk.binary?.sha256 ?? "—")"
-            }
-            return .init(content: [.plainText("APKs for \(packageName):\n" + lines.joined(separator: "\n"))])
+            return .init(content: [.plainText(render(apks: apks, packageName: packageName))])
         },
 
         ToolSpec(
@@ -311,6 +321,20 @@ enum PlayTools {
             }
         }
         return lines.joined(separator: "\n")
+    }
+
+    static func render(bundles: [GooglePlayBundle], packageName: String) -> String {
+        guard !bundles.isEmpty else { return "No bundles uploaded for \(packageName)." }
+        let lines = bundles.map { "versionCode \($0.versionCode)  sha256=\($0.sha256 ?? "—")" }
+        return "Bundles for \(packageName):\n" + lines.joined(separator: "\n")
+    }
+
+    static func render(apks: [GooglePlayApk], packageName: String) -> String {
+        guard !apks.isEmpty else { return "No APKs uploaded for \(packageName)." }
+        let lines = apks.map { apk in
+            "versionCode \(apk.versionCode)  sha256=\(apk.sha256 ?? apk.binary?.sha256 ?? "—")"
+        }
+        return "APKs for \(packageName):\n" + lines.joined(separator: "\n")
     }
 
     static func render(reviews: [GooglePlayReview], packageName: String) -> String {
