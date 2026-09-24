@@ -141,9 +141,9 @@ right after inviting the account is usually that delay, not a misconfiguration.
 The Play API only manages apps that already exist in the Play Console with at least one uploaded
 build. It cannot create a new app.
 
-> Organizations that block key creation (`iam.disableServiceAccountKeyCreation`) can use
-> `WorkloadIdentityFederationClient` from `GoogleAuthKit` in GitHub Actions instead. The MCP
-> server itself currently reads a JSON key.
+> The MCP server reads a JSON key. `GoogleAuthKit`'s keyless `WorkloadIdentityFederationClient`
+> currently issues `cloud-platform`-scoped tokens, which the Play Developer API does not accept,
+> so it is not yet an alternative for Play.
 
 ### Credentials
 
