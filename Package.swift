@@ -22,11 +22,11 @@ let package = Package(
         // accepting malformed ciphertext length); pin the floor there.
         .package(url: "https://github.com/apple/swift-crypto", from: "4.5.2"),
         .package(url: "https://github.com/apple/swift-log", from: "1.12.0"),
-        // Pin the SDK fix for object-valued experimental capabilities sent by Codex.
-        // Return to upstream once a release includes this decoding fix.
+        // Pin the public upstream PR for object-valued experimental capabilities sent by Codex.
+        // Return to an upstream release once it includes this decoding fix.
         .package(
-            url: "https://github.com/maniramezan/swift-sdk.git",
-            revision: "46dec85bd63c1e4909718b024d243bc92c7d403d"
+            url: "https://github.com/nstrm/swift-sdk.git",
+            revision: "f7077e0d5cd57e0b2a497862017aa94ee344252f"
         ),
         // Documentation only; contributes no code to any product.
         .package(url: "https://github.com/apple/swift-docc-plugin", from: "1.5.0"),
