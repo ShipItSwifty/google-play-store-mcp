@@ -1,5 +1,5 @@
 {
-  "originHash" : "3dd6b1d870b342a88d575704c8024c5b06672a3074f73dba4ea3c2c7ad218b3f",
+  "originHash" : "909d4da43ac11898367c9437681bbb82d24422f5fd307e91957fe579a285964e",
   "pins" : [
     {
       "identity" : "eventsource",
@@ -85,9 +85,9 @@
     {
       "identity" : "swift-sdk",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/maniramezan/swift-sdk.git",
+      "location" : "https://github.com/nstrm/swift-sdk.git",
       "state" : {
-        "revision" : "46dec85bd63c1e4909718b024d243bc92c7d403d"
+        "revision" : "f7077e0d5cd57e0b2a497862017aa94ee344252f"
       }
     },
     {

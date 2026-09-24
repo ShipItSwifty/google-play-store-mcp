@@ -23,11 +23,8 @@ inside one edit. ``GooglePlayClient/releaseOverview(packageName:)`` reads tracks
 concurrently inside a single edit:
 
 ```swift
-let summary = try await client.withReadOnlyEdit(packageName: "com.example.app") { editId in
-    async let edit = client.validateEdit(packageName: "com.example.app", editId: editId)
-    async let track: GooglePlayTrack = client.get("/applications/com.example.app/edits/\(editId)/tracks/production")
-    return try await (edit, track)
-}
+let overview = try await client.releaseOverview(packageName: "com.example.app")
+print(overview.tracks)
 ```
 
 Reviews and Data safety are not edit-scoped and open no edit.
