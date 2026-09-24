@@ -41,9 +41,13 @@ struct GooglePlayMCP {
 
         let writesEnabled = PlayTools.writesEnabled()
 
+        // One client for the life of the process, so its OAuth2 token is reused across calls.
+        let clients = CachedClientProvider(Self.makeClient)
+
         let server = Server(
             name: "google-play-store-mcp",
             version: GooglePlayMCPVersion.current,
+            instructions: Self.instructions(writesEnabled: writesEnabled),
             capabilities: .init(tools: .init(listChanged: false))
         )
 
@@ -57,7 +61,7 @@ struct GooglePlayMCP {
                     name: params.name,
                     arguments: params.arguments ?? [:],
                     writesEnabled: writesEnabled,
-                    clientProvider: Self.makeClient
+                    clientProvider: { try clients.client() }
                 )
             } catch let error as GoogleAPIError {
                 return .init(content: [.plainText("Google Play error: \(error.localizedDescription)")], isError: true)
@@ -92,6 +96,34 @@ struct GooglePlayMCP {
             )
         }
         return GooglePlayClient(credentials: credentials)
+    }
+
+    /// Guidance sent to the host in the `initialize` response, which most hosts fold into the
+    /// agent's context. It carries what the tool descriptions cannot: how the tools fit together,
+    /// and the Play API constraints an agent would otherwise learn by failing a call.
+    static func instructions(writesEnabled: Bool) -> String {
+        let writes =
+            writesEnabled
+            ? """
+            Write tools are ENABLED and act on real users. Before any write, read the current state \
+            with play_get_track and confirm the package, track, and fraction with the user. \
+            userFraction is exclusive (0 < f < 1); a full rollout is status completed, not 1.0. \
+            Play rejects lowering a rollout fraction; halt instead.
+            """
+            : """
+            Write tools are disabled (GOOGLE_PLAY_ENABLE_WRITES is unset), so every tool is read-only. \
+            If the user asks to release or change a rollout, tell them to enable writes rather than \
+            looking for a workaround.
+            """
+        return """
+            Google Play Developer API tools. Every tool takes the app's packageName (e.g. com.example.app).
+            Start with play_release_overview: it returns tracks, rollout fractions, bundles, and APKs in one \
+            call. Use play_get_track when only one track matters. Each edit-scoped read opens and deletes a \
+            throwaway Play edit, so prefer one overview call over several list calls.
+            play_list_reviews only covers roughly the last 7 days; say so when summarizing sentiment.
+            Data safety is write-only in the Play API; it cannot be read back or verified here.
+            \(writes)
+            """
     }
 
     static let usage = """

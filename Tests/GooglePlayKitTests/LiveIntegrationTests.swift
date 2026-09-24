@@ -103,6 +103,19 @@ struct LiveGooglePlayTests {
         for apk in apks { #expect(apk.versionCode > 0) }
     }
 
+    @Test("releaseOverview's concurrent reads in one edit match the individual reads")
+    func releaseOverviewMatchesIndividualReads() async throws {
+        let (client, packageName) = try makeClient()
+
+        // Proves Play accepts three concurrent reads against the same edit.
+        let overview = try await client.releaseOverview(packageName: packageName)
+        let tracks = try await client.listTracks(packageName: packageName)
+        let bundles = try await client.listBundles(packageName: packageName)
+
+        #expect(Set(overview.tracks.map(\.track)) == Set(tracks.map(\.track)))
+        #expect(overview.bundles.map(\.versionCode).sorted() == bundles.map(\.versionCode).sorted())
+    }
+
     @Test("lists reviews")
     func listsReviews() async throws {
         let (client, packageName) = try makeClient()

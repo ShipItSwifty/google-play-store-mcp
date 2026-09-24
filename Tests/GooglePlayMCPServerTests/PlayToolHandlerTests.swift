@@ -103,6 +103,32 @@ struct PlayToolHandlerTests {
         #expect(output.contains("rollout=25%"))
     }
 
+    @Test("play_release_overview renders tracks, bundles, and APKs together")
+    func releaseOverviewHandler() async throws {
+        let provider = stubClientProvider { request in
+            let path = request.url?.path ?? ""
+            if request.httpMethod == "POST", path.hasSuffix("/edits") { return (200, #"{"id":"e1"}"#) }
+            if request.httpMethod == "DELETE" { return (204, "") }
+            if path.hasSuffix("/tracks") {
+                return (200, #"{"tracks":[{"track":"production","releases":[{"versionCodes":["412"],"status":"completed"}]}]}"#)
+            }
+            if path.hasSuffix("/bundles") { return (200, #"{"bundles":[{"versionCode":412}]}"#) }
+            return (200, "{}")
+        }
+
+        let result = try await PlayTools.call(
+            name: "play_release_overview",
+            arguments: ["packageName": .string("com.example.app")],
+            writesEnabled: false,
+            clientProvider: provider
+        )
+
+        let output = try text(of: result)
+        #expect(output.contains("production: completed"))
+        #expect(output.contains("versionCode 412"))
+        #expect(output.contains("No APKs"))
+    }
+
     @Test("play_get_track renders the requested track")
     func getTrackHandler() async throws {
         let provider = stubClientProvider { request in

@@ -1,0 +1,15 @@
+{
+  "name": "shipitswifty-google-play",
+  "owner": {
+    "name": "ShipItSwifty",
+    "url": "https://github.com/ShipItSwifty"
+  },
+  "description": "Google Play Developer API tools and release workflows for Claude Code.",
+  "plugins": [
+    {
+      "name": "google-play-store",
+      "source": "./plugins/google-play-store",
+      "description": "Registers the google-play-store-mcp server and adds skills for release checks, staged rollouts, and review triage."
+    }
+  ]
+}

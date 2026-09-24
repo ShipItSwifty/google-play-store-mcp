@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "google-play-store": {
+      "command": "google-play-store-mcp"
+    }
+  }
+}
