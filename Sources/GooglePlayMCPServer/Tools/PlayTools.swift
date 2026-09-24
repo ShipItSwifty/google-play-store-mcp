@@ -134,7 +134,7 @@ enum PlayTools {
                 """,
             arguments: [
                 packageArgument,
-                .integer("maxResults", "How many reviews to return (1-100, default 50)."),
+                .integer("maxResults", "How many reviews to return (1-100, default 50).", minimum: 1, maximum: 100),
                 .string("translationLanguage", "BCP 47 tag to translate reviews into, e.g. en-US."),
             ]
         ) { arguments, client in
@@ -182,8 +182,12 @@ enum PlayTools {
                 .string("releaseName", "Internal release name shown in the Play Console."),
                 .string("releaseNotesLanguage", "BCP 47 tag for the release notes, e.g. en-US."),
                 .string("releaseNotesText", "Release note text (max 500 characters)."),
-                .string("status", "draft, inProgress, halted, or completed. Defaults to completed."),
-                .number("userFraction", "Staged rollout fraction, strictly between 0 and 1. Only valid with status inProgress or halted."),
+                .string(
+                    "status", "Release status. Defaults to completed.",
+                    allowedValues: releaseStatuses),
+                .number(
+                    "userFraction", "Staged rollout fraction, strictly between 0 and 1. Only valid with status inProgress or halted.",
+                    exclusiveMinimum: 0, exclusiveMaximum: 1),
             ],
             isReadOnly: false
         ) { arguments, client in
@@ -224,7 +228,9 @@ enum PlayTools {
             arguments: [
                 packageArgument,
                 .string("track", "Track name: internal, alpha, beta, or production.", required: true),
-                .number("userFraction", "New rollout fraction, strictly between 0 and 1 (exclusive).", required: true),
+                .number(
+                    "userFraction", "New rollout fraction, strictly between 0 and 1 (exclusive).", required: true,
+                    exclusiveMinimum: 0, exclusiveMaximum: 1),
             ],
             isReadOnly: false
         ) { arguments, client in
@@ -281,6 +287,9 @@ enum PlayTools {
     ]
 
     // MARK: - Rendering
+
+    /// Every `GooglePlayReleaseStatus` raw value, advertised as the `status` argument's `enum`.
+    static let releaseStatuses = ["draft", "inProgress", "halted", "completed"]
 
     private static func parseStatus(_ raw: String?) throws -> GooglePlayReleaseStatus {
         guard let raw else { return .completed }
