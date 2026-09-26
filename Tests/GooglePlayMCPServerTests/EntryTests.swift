@@ -38,6 +38,7 @@ struct EntryTests {
         #expect(usage.contains("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH"))
         #expect(usage.contains("GOOGLE_APPLICATION_CREDENTIALS"))
         #expect(usage.contains("GOOGLE_PLAY_ENABLE_WRITES"))
+        #expect(usage.contains("GOOGLE_PLAY_PACKAGE_NAME"))
     }
 
     @Test("makeClient reports a readable error when no credentials are configured")
@@ -127,6 +128,12 @@ struct ServerInstructionsTests {
         let writable = GooglePlayMCP.instructions(writesEnabled: true)
         #expect(writable.contains("ENABLED"))
         #expect(writable.contains("userFraction"))
+    }
+
+    @Test("instructions name the default package when one is configured")
+    func instructionsMentionDefaultPackage() {
+        #expect(GooglePlayMCP.instructions(writesEnabled: false, defaultPackageName: "com.example.app").contains("com.example.app"))
+        #expect(!GooglePlayMCP.instructions(writesEnabled: false).contains("defaults to"))
     }
 
     @Test("every tool the instructions name exists in the catalog")

@@ -6,6 +6,7 @@
 #   scripts/install-mcp.sh [--client claude-code|codex|cursor|windsurf|all]
 #                           [--binary /path/to/google-play-store-mcp]
 #                           [--service-account-path /path/to/service-account.json]
+#                           [--package-name com.example.app]
 #                           [--writes] [--yes] [--dry-run]
 #
 # With no --client, detects every supported client that appears to be installed
@@ -17,12 +18,13 @@ SERVER_NAME="google-play-store"
 CLIENT="all"
 BINARY=""
 SERVICE_ACCOUNT_PATH=""
+PACKAGE_NAME=""
 ENABLE_WRITES=0
 ASSUME_YES=0
 DRY_RUN=0
 
 usage() {
-  sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [[ $# -gt 0 ]]; do
@@ -30,6 +32,7 @@ while [[ $# -gt 0 ]]; do
     --client) CLIENT="$2"; shift 2 ;;
     --binary) BINARY="$2"; shift 2 ;;
     --service-account-path) SERVICE_ACCOUNT_PATH="$2"; shift 2 ;;
+    --package-name) PACKAGE_NAME="$2"; shift 2 ;;
     --writes) ENABLE_WRITES=1; shift ;;
     --yes) ASSUME_YES=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
@@ -110,6 +113,13 @@ write_json_config() {
       env_json="$(python3 -c "import json,sys; d=json.loads(sys.argv[1]); d['GOOGLE_PLAY_ENABLE_WRITES']='1'; print(json.dumps(d))" "$env_json")"
     fi
   fi
+  if [[ -n "$PACKAGE_NAME" ]]; then
+    if command -v jq >/dev/null 2>&1; then
+      env_json="$(jq -c --arg p "$PACKAGE_NAME" '. + {"GOOGLE_PLAY_PACKAGE_NAME": $p}' <<<"$env_json")"
+    else
+      env_json="$(python3 -c "import json,sys; d=json.loads(sys.argv[1]); d['GOOGLE_PLAY_PACKAGE_NAME']=sys.argv[2]; print(json.dumps(d))" "$env_json" "$PACKAGE_NAME")"
+    fi
+  fi
   local command_json
   command_json="$(printf '{"command": "%s", "env": %s}' "$BINARY" "$env_json")"
 
@@ -159,6 +169,9 @@ install_claude_code() {
   if [[ "$ENABLE_WRITES" -eq 1 ]]; then
     args+=(--env "GOOGLE_PLAY_ENABLE_WRITES=1")
   fi
+  if [[ -n "$PACKAGE_NAME" ]]; then
+    args+=(--env "GOOGLE_PLAY_PACKAGE_NAME=$PACKAGE_NAME")
+  fi
   args+=(-- "$BINARY")
   echo "would run: claude ${args[*]}"
   if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -182,6 +195,9 @@ install_codex() {
   fi
   if [[ "$ENABLE_WRITES" -eq 1 ]]; then
     args+=(--env "GOOGLE_PLAY_ENABLE_WRITES=1")
+  fi
+  if [[ -n "$PACKAGE_NAME" ]]; then
+    args+=(--env "GOOGLE_PLAY_PACKAGE_NAME=$PACKAGE_NAME")
   fi
   args+=(-- "$BINARY")
   echo "would run: codex ${args[*]}"
