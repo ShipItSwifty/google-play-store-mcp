@@ -130,7 +130,7 @@ struct ToolArgumentSchemaTests {
         let maxResults = try property("maxResults", of: "play_list_reviews")
         #expect(maxResults["type"] == .string("integer"))
         #expect(maxResults["minimum"] == .int(1))
-        #expect(maxResults["maximum"] == .int(100))
+        #expect(maxResults["maximum"] == .int(PlayTools.maxReviews))
     }
 
     @Test("an unconstrained argument carries no constraint keys")

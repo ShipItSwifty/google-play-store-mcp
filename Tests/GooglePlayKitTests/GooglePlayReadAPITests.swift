@@ -338,6 +338,66 @@ struct GooglePlayReadAPITests {
         #expect(query.contains("translationLanguage=pt%20BR"))
     }
 
+    /// A reviews page holding `ids`, with `next` as its continuation token.
+    private static func reviewsPage(_ ids: [String], next: String?) -> MockHTTPResponse {
+        let reviews = ids.map { #"{"reviewId":"\#($0)"}"# }.joined(separator: ",")
+        let pagination = next.map { #","tokenPagination":{"nextPageToken":"\#($0)"}"# } ?? ""
+        return .json(#"{"reviews":[\#(reviews)]\#(pagination)}"#)
+    }
+
+    @Test("listReviews follows page tokens until maxResults is reached")
+    func listReviewsPages() async throws {
+        let (client, sessionID) = makeClient { request in
+            let query = request.url?.query ?? ""
+            if query.contains("token=page%2B2") { return Self.reviewsPage(["r3", "r4"], next: "page3") }
+            if query.contains("token=page3") { return Self.reviewsPage(["r5"], next: nil) }
+            return Self.reviewsPage(["r1", "r2"], next: "page+2")
+        }
+
+        let reviews = try await client.listReviews(packageName: "com.example.app", maxResults: 4)
+
+        #expect(reviews.map(\.reviewId) == ["r1", "r2", "r3", "r4"])
+        let queries = MockURLProtocol.requests(for: sessionID).compactMap(\.query)
+        #expect(queries.count == 2, "stops once maxResults is collected")
+        // The second page asks only for what is still missing, and the opaque token's `+`
+        // is encoded rather than read as a space.
+        #expect(queries[1].contains("maxResults=2"))
+        #expect(queries[1].contains("token=page%2B2"))
+    }
+
+    @Test("listReviews stops on the last page when fewer reviews exist than requested")
+    func listReviewsStopsAtLastPage() async throws {
+        let (client, sessionID) = makeClient { request in
+            let query = request.url?.query ?? ""
+            if query.contains("token=p2") { return Self.reviewsPage(["r2"], next: nil) }
+            return Self.reviewsPage(["r1"], next: "p2")
+        }
+
+        let reviews = try await client.listReviews(packageName: "com.example.app", maxResults: 500)
+
+        #expect(reviews.map(\.reviewId) == ["r1", "r2"])
+        #expect(MockURLProtocol.requests(for: sessionID).count == 2)
+        #expect(MockURLProtocol.requests(for: sessionID).first?.query?.contains("maxResults=100") == true)
+    }
+
+    @Test("listReviews stops if Play hands back a token it already gave")
+    func listReviewsStopsOnRepeatedToken() async throws {
+        let (client, sessionID) = makeClient { _ in Self.reviewsPage(["r"], next: "same") }
+
+        let reviews = try await client.listReviews(packageName: "com.example.app", maxResults: 50)
+
+        #expect(reviews.count == 2)
+        #expect(MockURLProtocol.requests(for: sessionID).count == 2)
+    }
+
+    @Test("listReviews with a non-positive maxResults makes no request")
+    func listReviewsZero() async throws {
+        let (client, sessionID) = makeClient { _ in Self.reviewsPage(["r"], next: nil) }
+
+        #expect(try await client.listReviews(packageName: "com.example.app", maxResults: 0).isEmpty)
+        #expect(MockURLProtocol.requests(for: sessionID).isEmpty)
+    }
+
     @Test("updateRollout fails when the track has no in-progress release")
     func updateRolloutRequiresInProgressRelease() async throws {
         let (client, sessionID) = makeClient { request in

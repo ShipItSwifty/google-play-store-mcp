@@ -9,8 +9,9 @@ Read-only. Uses `play_list_reviews` from the `google-play-store` MCP server.
 
 ## Steps
 
-1. Call `play_list_reviews` with the app's `packageName` and `maxResults: 100`. If the user reads
-   another language or the reviews are multilingual, pass `translationLanguage` (e.g. `en-US`).
+1. Call `play_list_reviews` with the app's `packageName` and `maxResults: 500`. The tool pages
+   through Play's results for you. If the user reads another language or the reviews are
+   multilingual, pass `translationLanguage` (e.g. `en-US`).
 2. Classify each review into one primary theme:
    - **Crash / won't open**
    - **Bug**: something specific is broken

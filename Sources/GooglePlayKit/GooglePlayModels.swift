@@ -230,11 +230,26 @@ public struct GooglePlayReviewComment: Codable, Sendable {
     }
 }
 
+/// Cursor paging returned alongside `reviews.list` results.
+public struct GooglePlayTokenPagination: Codable, Sendable {
+    /// Pass as `token` to fetch the next page; absent on the last page.
+    public let nextPageToken: String?
+    public let previousPageToken: String?
+
+    public init(nextPageToken: String? = nil, previousPageToken: String? = nil) {
+        self.nextPageToken = nextPageToken
+        self.previousPageToken = previousPageToken
+    }
+}
+
 /// The envelope returned by `reviews.list`.
 public struct GooglePlayReviewsResponse: Codable, Sendable {
     public let reviews: [GooglePlayReview]?
+    /// Present when more reviews are available than this page returned.
+    public let tokenPagination: GooglePlayTokenPagination?
 
-    public init(reviews: [GooglePlayReview]? = nil) {
+    public init(reviews: [GooglePlayReview]? = nil, tokenPagination: GooglePlayTokenPagination? = nil) {
         self.reviews = reviews
+        self.tokenPagination = tokenPagination
     }
 }
