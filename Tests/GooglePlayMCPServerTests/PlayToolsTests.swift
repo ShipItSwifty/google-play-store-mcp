@@ -77,6 +77,54 @@ struct PlayToolCatalogTests {
     }
 }
 
+@Suite("Tool argument schema")
+struct ToolArgumentSchemaTests {
+
+    /// The JSON Schema property a tool advertises for one argument.
+    private func property(_ argument: String, of tool: String) throws -> [String: Value] {
+        let spec = try #require(PlayTools.allSpecs.first { $0.name == tool })
+        guard case .object(let root) = spec.tool.inputSchema,
+            case .object(let properties)? = root["properties"],
+            case .object(let property)? = properties[argument]
+        else {
+            throw GoogleAPIError.invalidConfiguration(reason: "\(tool) has no \(argument) property")
+        }
+        return property
+    }
+
+    @Test("status advertises exactly the release statuses the handler accepts")
+    func statusIsAnEnum() throws {
+        let status = try property("status", of: "play_upload_and_release")
+        #expect(status["enum"] == .array(PlayTools.releaseStatuses.map { Value.string($0) }))
+        // Every advertised value must decode, or the schema would invite a call that fails.
+        for raw in PlayTools.releaseStatuses {
+            #expect(GooglePlayReleaseStatus(rawValue: raw) != nil, "\(raw) is not a release status")
+        }
+    }
+
+    @Test("userFraction advertises Play's exclusive (0, 1) range", arguments: ["play_upload_and_release", "play_update_rollout"])
+    func userFractionIsExclusive(tool: String) throws {
+        let fraction = try property("userFraction", of: tool)
+        #expect(fraction["exclusiveMinimum"] == .double(0))
+        #expect(fraction["exclusiveMaximum"] == .double(1))
+        #expect(fraction["minimum"] == nil)
+    }
+
+    @Test("maxResults advertises integer bounds matching the clamp")
+    func maxResultsIsBounded() throws {
+        let maxResults = try property("maxResults", of: "play_list_reviews")
+        #expect(maxResults["type"] == .string("integer"))
+        #expect(maxResults["minimum"] == .int(1))
+        #expect(maxResults["maximum"] == .int(PlayTools.maxReviews))
+    }
+
+    @Test("an unconstrained argument carries no constraint keys")
+    func plainArgumentHasNoConstraints() throws {
+        let track = try property("track", of: "play_get_track")
+        #expect(Set(track.keys) == ["type", "description"])
+    }
+}
+
 @Suite("MCP dispatch")
 struct PlayToolDispatchTests {
 

@@ -55,7 +55,8 @@ published Data safety declaration, and none that distinguishes a published decla
 unpublished draft — verifying what is live has to happen in the Play Console UI. No MCP server
 built on this API can answer that question.
 
-Google also only returns reviews from roughly the last week.
+Google also only returns reviews from roughly the last week. `play_list_reviews` follows Play's page
+tokens for you, up to 500 reviews per call.
 
 ## Example prompts
 
