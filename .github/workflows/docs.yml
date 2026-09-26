@@ -1,10 +1,13 @@
 name: Documentation
 
-# Builds the GooglePlayKit DocC archive and publishes it to GitHub Pages.
+# Builds the GoogleAuthKit + GooglePlayKit DocC archive and publishes it to GitHub Pages.
+# Pull requests only build it, so broken docs fail review instead of the post-merge deploy.
 # Enable Pages for this repo with "Source: GitHub Actions" before the first run.
 
 on:
   push:
+    branches: [main]
+  pull_request:
     branches: [main]
   workflow_dispatch:
 
@@ -12,8 +15,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  # Deploys share one group so they never overlap; PR builds get their own and cancel superseded runs.
+  group: ${{ github.event_name == 'pull_request' && format('docs-{0}', github.ref) || 'pages' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -31,7 +35,9 @@ jobs:
         run: |
           swift package --allow-writing-to-directory ./docs \
             generate-documentation \
+            --target GoogleAuthKit \
             --target GooglePlayKit \
+            --enable-experimental-combined-documentation \
             --disable-indexing \
             --transform-for-static-hosting \
             --hosting-base-path google-play-store-mcp \
@@ -57,12 +63,14 @@ jobs:
           EOF
 
       - name: Upload Pages artifact
+        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v5
         with:
           path: ./docs
 
   deploy:
     name: Deploy to Pages
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-24.04
     environment:
