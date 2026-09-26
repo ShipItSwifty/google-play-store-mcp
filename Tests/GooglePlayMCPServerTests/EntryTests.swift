@@ -1,5 +1,7 @@
 import Foundation
 import GoogleAuthKit
+import GooglePlayKit
+import Synchronization
 import Testing
 
 @testable import GooglePlayMCPServer
@@ -65,6 +67,79 @@ struct EntryTests {
                 return
             }
             #expect(reason.contains("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON"))
+        }
+    }
+}
+
+@Suite("Client caching")
+struct CachedClientProviderTests {
+
+    private static func stubClient() -> GooglePlayClient {
+        GooglePlayClient(tokenProvider: { "test-token" }, session: .shared)
+    }
+
+    @Test("the client is resolved once and reused, so its token cache survives across calls")
+    func resolvesOnce() throws {
+        let resolutions = Mutex(0)
+        let provider = CachedClientProvider {
+            resolutions.withLock { $0 += 1 }
+            return Self.stubClient()
+        }
+
+        _ = try provider.client()
+        _ = try provider.client()
+        _ = try provider.client()
+
+        #expect(resolutions.withLock { $0 } == 1)
+    }
+
+    @Test("a failed resolution is not cached, so fixing credentials needs no restart")
+    func failureIsRetried() throws {
+        let attempts = Mutex(0)
+        let provider = CachedClientProvider {
+            let attempt = attempts.withLock { count in
+                count += 1
+                return count
+            }
+            guard attempt > 1 else {
+                throw GoogleAPIError.invalidConfiguration(reason: "no credentials yet")
+            }
+            return Self.stubClient()
+        }
+
+        #expect(throws: GoogleAPIError.self) { _ = try provider.client() }
+        _ = try provider.client()
+        _ = try provider.client()
+
+        #expect(attempts.withLock { $0 } == 2)
+    }
+}
+
+@Suite("Server instructions")
+struct ServerInstructionsTests {
+
+    @Test("instructions point the agent at the overview tool and state the write gate")
+    func instructionsReflectWriteGate() {
+        let readOnly = GooglePlayMCP.instructions(writesEnabled: false)
+        #expect(readOnly.contains("play_release_overview"))
+        #expect(readOnly.contains("disabled"))
+
+        let writable = GooglePlayMCP.instructions(writesEnabled: true)
+        #expect(writable.contains("ENABLED"))
+        #expect(writable.contains("userFraction"))
+    }
+
+    @Test("every tool the instructions name exists in the catalog")
+    func instructionsNameRealTools() {
+        let names = Set(PlayTools.allSpecs.map(\.name))
+        for writesEnabled in [false, true] {
+            let text = GooglePlayMCP.instructions(writesEnabled: writesEnabled)
+            let mentioned = text.split(whereSeparator: { !$0.isLetter && $0 != "_" })
+                .map(String.init)
+                .filter { $0.hasPrefix("play_") }
+            for tool in mentioned {
+                #expect(names.contains(tool), "instructions mention unknown tool \(tool)")
+            }
         }
     }
 }

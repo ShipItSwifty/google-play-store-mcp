@@ -61,6 +61,48 @@ struct GooglePlayReadAPITests {
         #expect(!requests.contains { $0.path.contains(":commit") })
     }
 
+    @Test("releaseOverview reads tracks, bundles, and APKs from one edit")
+    func releaseOverviewSharesOneEdit() async throws {
+        let (client, sessionID) = makeClient { request in
+            let path = request.url?.path ?? ""
+            if request.httpMethod == "POST", path.hasSuffix("/edits") { return .json(#"{"id":"edit-1"}"#) }
+            if request.httpMethod == "DELETE" { return .empty() }
+            if path.hasSuffix("/tracks") { return .json(tracksJSON) }
+            if path.hasSuffix("/bundles") { return .json(#"{"bundles":[{"versionCode":412,"sha256":"abc"}]}"#) }
+            if path.hasSuffix("/apks") { return .json("{}") }
+            return .error(statusCode: 404, body: "unexpected \(request.httpMethod ?? "") \(path)")
+        }
+
+        let overview = try await client.releaseOverview(packageName: "com.example.app")
+
+        #expect(overview.tracks.count == 2)
+        #expect(overview.bundles.map(\.versionCode) == [412])
+        #expect(overview.apks.isEmpty)
+
+        // One edit for all three reads, deleted afterwards and never committed.
+        let requests = MockURLProtocol.requests(for: sessionID)
+        #expect(requests.filter { $0.method == "POST" && $0.path.hasSuffix("/edits") }.count == 1)
+        #expect(requests.filter { $0.method == "DELETE" }.count == 1)
+        #expect(!requests.contains { $0.path.contains(":commit") })
+    }
+
+    @Test("releaseOverview still deletes its edit when one of the reads fails")
+    func releaseOverviewCleansUpOnFailure() async throws {
+        let (client, sessionID) = makeClient { request in
+            let path = request.url?.path ?? ""
+            if request.httpMethod == "POST", path.hasSuffix("/edits") { return .json(#"{"id":"edit-1"}"#) }
+            if request.httpMethod == "DELETE" { return .empty() }
+            if path.hasSuffix("/apks") { return .error(statusCode: 403, body: "denied") }
+            return .json("{}")
+        }
+
+        await #expect(throws: GoogleAPIError.self) {
+            _ = try await client.releaseOverview(packageName: "com.example.app")
+        }
+        let requests = MockURLProtocol.requests(for: sessionID)
+        #expect(requests.contains { $0.method == "DELETE" && $0.path.hasSuffix("/edits/edit-1") })
+    }
+
     @Test("a draft release with no versionCodes decodes, as Play really returns it")
     func draftReleaseWithoutVersionCodesDecodes() async throws {
         // Verbatim shape from a live tracks.list: an untouched production track has no releases

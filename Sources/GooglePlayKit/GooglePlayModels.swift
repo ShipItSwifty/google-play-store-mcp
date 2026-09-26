@@ -152,6 +152,20 @@ public struct GooglePlayApksResponse: Codable, Sendable {
     }
 }
 
+/// Tracks, bundles, and APKs read from one edit — see
+/// ``GooglePlayClient/releaseOverview(packageName:)``.
+public struct GooglePlayReleaseOverview: Sendable {
+    public let tracks: [GooglePlayTrack]
+    public let bundles: [GooglePlayBundle]
+    public let apks: [GooglePlayApk]
+
+    public init(tracks: [GooglePlayTrack] = [], bundles: [GooglePlayBundle] = [], apks: [GooglePlayApk] = []) {
+        self.tracks = tracks
+        self.bundles = bundles
+        self.apks = apks
+    }
+}
+
 // MARK: - Reviews
 
 /// A user review left on the Play Store listing.

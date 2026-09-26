@@ -1,244 +1,38 @@
 # google-play-store-mcp
 
-Swift clients for Google service-account auth and the Google Play Developer API, plus an MCP
-server that exposes Play release state to an AI agent.
+Swift clients for Google service-account authentication and the Google Play Developer API, plus an
+MCP server for Play release state. The libraries run on macOS and Linux; the server is read-only by
+default.
 
-Three products:
-
-| Product | What it is |
+| Product | Purpose |
 |---|---|
-| `GoogleAuthKit` | Service-account credentials, RS256 JWT → OAuth2 token exchange, and GitHub Actions Workload Identity Federation. Scope-agnostic, so it backs Play, Firebase, and any other Google API. |
-| `GooglePlayKit` | Play Developer API v3 client: tracks, staged rollouts, bundles, APKs, reviews, and the edit → upload → track → commit release workflow. |
-| `google-play-store-mcp` | An MCP server over the above, read-only by default. |
+| `GoogleAuthKit` | Service-account JWT and OAuth2 exchange, plus Workload Identity Federation for Google APIs. |
+| `GooglePlayKit` | Play Developer API client for tracks, rollouts, artifacts, reviews, and releases. |
+| `google-play-store-mcp` | MCP server exposing Play reads and optional release writes. |
 
-Cross-platform (macOS and Linux) — everything is `Foundation` + `swift-crypto`; nothing shells out.
+## Quick start
 
-## Install (library)
+1. [Create a service account with Play Console access](guides/server-setup.md#service-account-setup).
+2. Build and register the server:
 
-```swift
-.package(url: "https://github.com/ShipItSwifty/google-play-store-mcp.git", from: "0.1.0")
-```
+   ```bash
+   swift build -c release --product google-play-store-mcp
+   scripts/install-mcp.sh --service-account-path /path/to/service-account.json
+   ```
 
-```swift
-.target(name: "YourTarget", dependencies: [
-    .product(name: "GooglePlayKit", package: "google-play-store-mcp"),
-    .product(name: "GoogleAuthKit", package: "google-play-store-mcp"),
-])
-```
+3. Ask your agent: “What's live on production for `com.example.app`, and how are reviews for the new version?”
 
-### Library API
+Write tools appear only when `GOOGLE_PLAY_ENABLE_WRITES=1`. See the [tool catalog](guides/tools.md#tool-catalog)
+for what the server can do and how each tool has been verified.
 
-```swift
-import GoogleAuthKit
-import GooglePlayKit
+## Guides
 
-let client = try GooglePlayClient(serviceAccountJSONPath: "./service-account.json")
-
-// Reads — what is live, and to how many users?
-for track in try await client.listTracks(packageName: "com.example.app") {
-    for release in track.releases ?? [] {
-        print(track.track, release.status, release.userFraction ?? 1.0)
-    }
-}
-
-// Writes — upload and release in one committed edit.
-let uploader = GooglePlayUploadService(client: client, packageName: "com.example.app")
-let versionCode = try await uploader.uploadAndRelease(
-    aabPath: "./build/app-release.aab",
-    track: "internal",
-    releaseNotes: [GooglePlayReleaseNote(language: "en-US", text: "Bug fixes")],
-    status: .inProgress,
-    userFraction: 0.1
-)
-
-// Rollout control.
-// userFraction is exclusive: 0 < f < 1. A full rollout is a .completed release, not 1.0.
-try await client.updateRollout(packageName: "com.example.app", track: "production", userFraction: 0.5)
-// Halting preserves the fraction, so you know where the rollout stopped.
-try await client.haltRollout(packageName: "com.example.app", track: "production")
-```
-
-#### Edits are transactions
-
-Almost nothing in the Play publishing API can be read outside an *edit*: tracks, bundles and APKs
-all live under `/edits/{editId}/…`. An edit only changes the app when it is **committed**, and an
-abandoned one shows up in the Play Console as a pending change that blocks a human from starting
-their own.
-
-`withReadOnlyEdit(packageName:_:)` therefore creates an edit, runs the read, and always deletes
-it — never commits. Every read helper (`listTracks`, `getTrack`, `listBundles`, `listApks`) goes
-through it, and `GooglePlayUploadService` deletes its edit if the upload fails partway. Reads that
-are not edit-scoped (`listReviews`) create no edit at all.
-
-#### Errors
-
-Both libraries throw one type, `GoogleAPIError`, so a consumer needs a single mapping to its own
-error domain. Its `apiError` case unwraps Google's `{"error":{"message":…,"status":…}}` envelope,
-so a 403 reads as `The caller does not have permission (PERMISSION_DENIED)` rather than raw JSON.
-
-#### Testing against it
-
-`GooglePlayClient.init(tokenProvider:session:)` is public: pass a canned token and a mocked
-`URLSession` to test Play-calling code without RSA signing, a network round trip, or `@testable`.
-
-```swift
-let client = GooglePlayClient(tokenProvider: { "test-token" }, session: mockSession)
-```
-
-## MCP server
-
-### Credentials
-
-Read from the environment, in priority order:
-
-| Variable | Meaning |
+| Guide | Contents |
 |---|---|
-| `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` | Raw service account key JSON |
-| `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH` | Path to the key file |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Path to the key file (Google-wide convention) |
-
-The service account needs Play Developer API access to the app, granted in the Play Console under
-**Users and permissions**. Credentials are resolved per tool call, so a credential problem is
-reported as a readable tool error instead of the server failing to launch.
-
-### Tools
-
-Read tools are always advertised. Write tools appear only when `GOOGLE_PLAY_ENABLE_WRITES=1` —
-an agent exploring release state should not be one malformed argument away from changing a
-production rollout.
-
-Every tool is implemented. "Kind" is whether it reads or changes Play state; "Live-verified"
-is how far it has been exercised against a real Play Console account (see
-[Verification status](#verification-status)).
-
-| Tool | Kind | Live-verified | What it answers |
-|---|---|---|---|
-| `play_list_tracks` | read | yes | What is live on every track, and at what rollout percentage |
-| `play_get_track` | read | yes | The same, for one track |
-| `play_list_bundles` | read | yes | Which AABs have been uploaded |
-| `play_list_apks` | read | yes | Which APKs have been uploaded |
-| `play_list_reviews` | read | yes | Recent user reviews with rating, device, and app version |
-| `play_validate_edit` | read | yes | Would the app's current state pass Play's pre-commit checks |
-| `play_update_rollout` | write | encoding only | Change the staged-rollout fraction |
-| `play_halt_rollout` | write | encoding only | Halt an in-progress rollout |
-| `play_upload_and_release` | write | mocked only | Upload an AAB/APK and release it to a track |
-| `play_upload_data_safety_labels` | write | mocked only | Upload a Safety Labels CSV |
-
-#### Verification status
-
-**yes** — verified against a live Play Console account: authentication, tracks, bundles, APKs,
-reviews, and a throwaway edit created and confirmed deleted.
-
-**encoding only** — `play_update_rollout` and `play_halt_rollout` have their request encoding
-verified live (a track `PUT` plus Play's pre-commit validation, inside an edit that is deleted
-rather than committed), and their refusal path checked against a real track. Advancing or halting
-a *real* staged rollout is still unproven — it needs an app with a live rollout to act on.
-
-**mocked only** — `play_upload_and_release` end to end and `play_upload_data_safety_labels` are
-proven only against mocked HTTP. Both need an app with a publishable artifact. Treat them
-accordingly.
-
-Run the live suite yourself — see [Live tests](#live-tests).
-
-#### What the Play API cannot do
-
-`applications.dataSafety` is **write-only**. There is no endpoint that reads back the current
-published Data safety declaration, and none that distinguishes a published declaration from an
-unpublished draft — verifying what is live has to happen in the Play Console UI. No MCP server
-built on this API can answer that question.
-
-Google also only returns reviews from roughly the last week.
-
-### Run it
-
-```bash
-swift build -c release --product google-play-store-mcp
-.build/release/google-play-store-mcp --help
-```
-
-### Register with a client
-
-Supported clients: Claude Code, Codex CLI, Cursor, Windsurf.
-
-```bash
-scripts/install-mcp.sh --service-account-path /path/to/service-account.json
-```
-
-Registration is user-wide, available across projects (Claude Code uses `--scope user`).
-The installer prefers `--binary`, then the executable on `PATH` (including Homebrew), then
-a release/debug build in this checkout, regardless of the directory you run it from.
-
-With no `--client` flag it detects whichever of those are installed and asks before touching
-each one's config (Claude Code and Codex go through their own `mcp add` CLI; Cursor and Windsurf
-get a JSON diff, confirmation, and a timestamped backup of the file it edits). Nothing runs
-automatically as part of `brew install` — you run this by hand, whenever you want the server
-registered. Add `--writes` to enable the write tools, `--dry-run` to preview without writing, or
-`--client <name>` to target one client. See `scripts/install-mcp.sh --help` for all options.
-
-To register by hand instead, the config shape is the same for every client except Codex (which
-uses TOML in `~/.codex/config.toml` under `[mcp_servers.google-play-store]`):
-
-```json
-{
-  "mcpServers": {
-    "google-play-store": {
-      "command": "/path/to/google-play-store-mcp",
-      "env": {
-        "GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH": "/path/to/service-account.json"
-      }
-    }
-  }
-}
-```
-
-Add `"GOOGLE_PLAY_ENABLE_WRITES": "1"` to that `env` block to enable the write tools.
-
-| Client | Config file |
-|---|---|
-| Claude Code | `claude mcp add` (see `claude mcp add --help`) |
-| Codex CLI | `codex mcp add` (see `codex mcp add --help`), or `~/.codex/config.toml` |
-| Cursor | `~/.cursor/mcp.json` (or `.cursor/mcp.json` for one project) |
-| Windsurf | `~/.codeium/windsurf/mcp_config.json` |
-
-## Development
-
-```bash
-swift build
-swift test --enable-code-coverage --no-parallel
-scripts/coverage-gate.sh
-xcrun swift-format lint --recursive --strict --configuration .swift-format Sources Tests
-```
-
-### Live tests
-
-The default run is fully mocked. To check the client against a real Play Console account
-(read-only — it creates and deletes throwaway edits, and publishes nothing):
-
-```bash
-GOOGLE_PLAY_TEST_PACKAGE_NAME=com.example.app \
-GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH=./service-account.json \
-  swift test --filter LiveGooglePlayTests
-```
-
-It skips when those are unset. Adding `GOOGLE_PLAY_LIVE_WRITE_TESTS=1` additionally exercises the
-write encoding — a track `PUT` and Play's pre-commit validation, inside an edit that is deleted
-rather than committed, so the app does not change. No test uploads an artifact or commits an edit.
-
-### Coverage
-
-`scripts/coverage-gate.sh` enforces a line-coverage floor over product code only. CI sets
-`MIN_LINE_COVERAGE: "78"`; actual coverage is ~81%. Raise the floor as coverage climbs.
-
-## Releasing
-
-Tag with bare SemVer — no `v` prefix:
-
-```bash
-git tag 0.1.0 && git push origin 0.1.0
-```
-
-The release workflow stamps the version into `Entry.swift`, builds a macOS universal binary and a
-static Linux binary, attests both, and publishes a GitHub release.
+| [Libraries](guides/library.md) | SwiftPM installation, API examples, edit lifecycle, errors, and test setup. |
+| [Server setup](guides/server-setup.md) | Service account permissions, credentials, client registration, plugin, and troubleshooting. |
+| [MCP tools](guides/tools.md) | Tool catalog, live verification status, Play API limits, and example prompts. |
+| [Development and releases](guides/development.md) | Build, tests, coverage, smoke test, and release workflow. |
 
 ## License
 
