@@ -76,6 +76,12 @@ private func text(of result: CallTool.Result) throws -> String {
     return value
 }
 
+/// Decodes a result's `structuredContent` back into the payload type the tool promised.
+private func structured<Output: Decodable>(_ type: Output.Type, of result: CallTool.Result) throws -> Output {
+    let value = try #require(result.structuredContent)
+    return try JSONDecoder().decode(type, from: JSONEncoder().encode(value))
+}
+
 @Suite("MCP tool handlers", .serialized)
 struct PlayToolHandlerTests {
 
@@ -101,6 +107,13 @@ struct PlayToolHandlerTests {
         let output = try text(of: result)
         #expect(output.contains("production: inProgress"))
         #expect(output.contains("rollout=25%"))
+
+        // The same data, exact and machine-readable.
+        let payload = try structured(ToolOutput.Tracks.self, of: result)
+        #expect(payload.packageName == "com.example.app")
+        let release = try #require(payload.tracks.first?.releases?.first)
+        #expect(release.userFraction == 0.25)
+        #expect(release.versionCodes == ["412"])
     }
 
     @Test("play_release_overview renders tracks, bundles, and APKs together")
@@ -127,6 +140,10 @@ struct PlayToolHandlerTests {
         #expect(output.contains("production: completed"))
         #expect(output.contains("versionCode 412"))
         #expect(output.contains("No APKs"))
+
+        let payload = try structured(ToolOutput.Overview.self, of: result)
+        #expect(payload.bundles.map(\.versionCode) == [412])
+        #expect(payload.apks.isEmpty)
     }
 
     @Test("play_get_track renders the requested track")
@@ -201,6 +218,9 @@ struct PlayToolHandlerTests {
         let output = try text(of: result)
         #expect(output.contains("Sam"))
         #expect(output.contains("Great"))
+
+        let payload = try structured(ToolOutput.Reviews.self, of: result)
+        #expect(payload.reviews.map(\.reviewId) == ["r1"])
     }
 
     @Test("play_validate_edit reports success and leaves no edit behind")
@@ -244,6 +264,10 @@ struct PlayToolHandlerTests {
             writesEnabled: true, clientProvider: provider)
 
         #expect(try text(of: result).contains("0.5"))
+
+        // The structured result is the track as Play returned it after the commit.
+        let payload = try structured(ToolOutput.Rollout.self, of: result)
+        #expect(payload.track.releases?.first?.userFraction == 0.5)
     }
 
     @Test("a numeric argument sent as a string is still accepted")
@@ -302,6 +326,10 @@ struct PlayToolHandlerTests {
         let output = try text(of: result)
         #expect(output.contains("Play Console"))
         #expect(output.contains("no confirmation"))
+
+        let payload = try structured(ToolOutput.DataSafetyUpload.self, of: result)
+        #expect(payload.uploaded)
+        #expect(!payload.verifiable)
     }
 
     @Test("play_upload_and_release rejects an invalid status before uploading anything")

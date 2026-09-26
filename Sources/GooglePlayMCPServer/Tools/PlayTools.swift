@@ -91,7 +91,10 @@ enum PlayTools {
                 render(bundles: overview.bundles, packageName: packageName),
                 render(apks: overview.apks, packageName: packageName),
             ]
-            return .init(content: [.plainText(sections.joined(separator: "\n\n"))])
+            return try .rendered(
+                sections.joined(separator: "\n\n"),
+                structured: ToolOutput.Overview(
+                    packageName: packageName, tracks: overview.tracks, bundles: overview.bundles, apks: overview.apks))
         },
 
         ToolSpec(
@@ -105,7 +108,9 @@ enum PlayTools {
         ) { arguments, client in
             let packageName = try arguments.packageName()
             let tracks = try await client().listTracks(packageName: packageName)
-            return .init(content: [.plainText(render(tracks: tracks, packageName: packageName))])
+            return try .rendered(
+                render(tracks: tracks, packageName: packageName),
+                structured: ToolOutput.Tracks(packageName: packageName, tracks: tracks))
         },
 
         ToolSpec(
@@ -118,7 +123,9 @@ enum PlayTools {
         ) { arguments, client in
             let packageName = try arguments.packageName()
             let track = try await client().getTrack(packageName: packageName, track: try arguments.require("track"))
-            return .init(content: [.plainText(render(tracks: [track], packageName: packageName))])
+            return try .rendered(
+                render(tracks: [track], packageName: packageName),
+                structured: ToolOutput.Tracks(packageName: packageName, tracks: [track]))
         },
 
         ToolSpec(
@@ -128,7 +135,9 @@ enum PlayTools {
         ) { arguments, client in
             let packageName = try arguments.packageName()
             let bundles = try await client().listBundles(packageName: packageName)
-            return .init(content: [.plainText(render(bundles: bundles, packageName: packageName))])
+            return try .rendered(
+                render(bundles: bundles, packageName: packageName),
+                structured: ToolOutput.Bundles(packageName: packageName, bundles: bundles))
         },
 
         ToolSpec(
@@ -138,7 +147,9 @@ enum PlayTools {
         ) { arguments, client in
             let packageName = try arguments.packageName()
             let apks = try await client().listApks(packageName: packageName)
-            return .init(content: [.plainText(render(apks: apks, packageName: packageName))])
+            return try .rendered(
+                render(apks: apks, packageName: packageName),
+                structured: ToolOutput.Apks(packageName: packageName, apks: apks))
         },
 
         ToolSpec(
@@ -159,7 +170,9 @@ enum PlayTools {
                 maxResults: arguments.int("maxResults", default: 50),
                 translationLanguage: arguments.string("translationLanguage")
             )
-            return .init(content: [.plainText(render(reviews: reviews, packageName: packageName))])
+            return try .rendered(
+                render(reviews: reviews, packageName: packageName),
+                structured: ToolOutput.Reviews(packageName: packageName, reviews: reviews))
         },
 
         ToolSpec(
@@ -175,7 +188,9 @@ enum PlayTools {
             let result = try await play.withReadOnlyEdit(packageName: packageName) { editId in
                 try await play.validateEdit(packageName: packageName, editId: editId)
             }
-            return .init(content: [.plainText("Edit \(result.id) for \(packageName) validated successfully.")])
+            return try .rendered(
+                "Edit \(result.id) for \(packageName) validated successfully.",
+                structured: ToolOutput.Validation(packageName: packageName, editId: result.id, valid: true))
         },
     ]
 
@@ -217,6 +232,7 @@ enum PlayTools {
                         language: arguments.string("releaseNotesLanguage") ?? "en-US", text: text))
             }
 
+            let userFraction = try? arguments.requireDouble("userFraction")
             let uploader = GooglePlayUploadService(client: try client(), packageName: packageName)
             let versionCode = try await uploader.uploadAndRelease(
                 aabPath: arguments.string("aabPath"),
@@ -225,13 +241,13 @@ enum PlayTools {
                 releaseName: arguments.string("releaseName"),
                 releaseNotes: notes,
                 status: status,
-                userFraction: try? arguments.requireDouble("userFraction")
+                userFraction: userFraction
             )
-            return .init(
-                content: [
-                    .plainText(
-                        "Released versionCode \(versionCode) to '\(track)' for \(packageName) (\(status.rawValue)).")
-                ])
+            return try .rendered(
+                "Released versionCode \(versionCode) to '\(track)' for \(packageName) (\(status.rawValue)).",
+                structured: ToolOutput.Release(
+                    packageName: packageName, track: track, versionCode: versionCode, status: status,
+                    userFraction: userFraction))
         },
 
         ToolSpec(
@@ -252,9 +268,10 @@ enum PlayTools {
             let packageName = try arguments.packageName()
             let track = try arguments.require("track")
             let fraction = try arguments.requireDouble("userFraction")
-            _ = try await client().updateRollout(packageName: packageName, track: track, userFraction: fraction)
-            return .init(
-                content: [.plainText("Rollout for '\(track)' in \(packageName) set to \(fraction).")])
+            let updated = try await client().updateRollout(packageName: packageName, track: track, userFraction: fraction)
+            return try .rendered(
+                "Rollout for '\(track)' in \(packageName) set to \(fraction).",
+                structured: ToolOutput.Rollout(packageName: packageName, track: updated))
         },
 
         ToolSpec(
@@ -268,8 +285,10 @@ enum PlayTools {
         ) { arguments, client in
             let packageName = try arguments.packageName()
             let track = try arguments.require("track")
-            _ = try await client().haltRollout(packageName: packageName, track: track)
-            return .init(content: [.plainText("Rollout for '\(track)' in \(packageName) halted.")])
+            let halted = try await client().haltRollout(packageName: packageName, track: track)
+            return try .rendered(
+                "Rollout for '\(track)' in \(packageName) halted.",
+                structured: ToolOutput.Rollout(packageName: packageName, track: halted))
         },
 
         ToolSpec(
@@ -290,14 +309,12 @@ enum PlayTools {
                 packageName: packageName,
                 safetyLabelsCSV: try arguments.require("safetyLabelsCSV")
             )
-            return .init(
-                content: [
-                    .plainText(
-                        """
-                        Safety Labels uploaded for \(packageName). The API returns no confirmation of \
-                        the resulting state — verify the Data safety section in the Play Console.
-                        """)
-                ])
+            return try .rendered(
+                """
+                Safety Labels uploaded for \(packageName). The API returns no confirmation of \
+                the resulting state — verify the Data safety section in the Play Console.
+                """,
+                structured: ToolOutput.DataSafetyUpload(packageName: packageName, uploaded: true, verifiable: false))
         },
     ]
 

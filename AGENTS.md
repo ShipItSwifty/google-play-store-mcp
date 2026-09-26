@@ -59,12 +59,15 @@ Extracted from [ShipItSwifty](https://github.com/ShipItSwifty/shipitswifty), whi
    `exclusiveMinimum`/`exclusiveMaximum`) so hosts can reject a bad call before it reaches Play.
 2. Set `isReadOnly: false` for anything that changes Play state — that both gates it behind
    `GOOGLE_PLAY_ENABLE_WRITES` and sets the `destructiveHint` the host shows the user.
-3. Back it with a method on `GooglePlayClient` (in `GooglePlayReadAPI.swift`) rather than
+3. Return `try .rendered(text, structured: ToolOutput.X(...))`: readable text plus a `Codable`
+   payload (declared in `Tools/ToolOutput.swift`) for `structuredContent`. MCP requires it to be
+   an object, so wrap lists.
+4. Back it with a method on `GooglePlayClient` (in `GooglePlayReadAPI.swift`) rather than
    assembling requests in the tool handler.
-4. Add tests in `Tests/GooglePlayMCPServerTests/PlayToolsTests.swift`. The catalog tests
+5. Add tests in `Tests/GooglePlayMCPServerTests/PlayToolsTests.swift`. The catalog tests
    (uniqueness, gating, required arguments) cover new tools automatically.
-5. Update the tool table in `guides/tools.md`.
-6. If the tool changes how an agent should sequence calls, update `GooglePlayMCP.instructions`
+6. Update the tool table in `guides/tools.md`.
+7. If the tool changes how an agent should sequence calls, update `GooglePlayMCP.instructions`
    in `Entry.swift` (a test checks that every `play_*` name it mentions exists) and any skill
    under `plugins/google-play-store/skills/` that should use it.
 
