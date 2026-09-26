@@ -55,6 +55,8 @@ Extracted from [ShipItSwifty](https://github.com/ShipItSwifty/shipitswifty), whi
 1. Add a `ToolSpec` to `PlayTools.readSpecs` or `PlayTools.writeSpecs` in
    `Sources/GooglePlayMCPServer/Tools/PlayTools.swift`. The JSON Schema is derived from the
    `arguments` array, so there is no separate schema to update and no dispatch `switch` to extend.
+   Declare constraints on the argument (`allowedValues`, `minimum`/`maximum`,
+   `exclusiveMinimum`/`exclusiveMaximum`) so hosts can reject a bad call before it reaches Play.
 2. Set `isReadOnly: false` for anything that changes Play state — that both gates it behind
    `GOOGLE_PLAY_ENABLE_WRITES` and sets the `destructiveHint` the host shows the user.
 3. Return `try .rendered(text, structured: ToolOutput.X(...))`: readable text plus a `Codable`
@@ -64,7 +66,7 @@ Extracted from [ShipItSwifty](https://github.com/ShipItSwifty/shipitswifty), whi
    assembling requests in the tool handler.
 5. Add tests in `Tests/GooglePlayMCPServerTests/PlayToolsTests.swift`. The catalog tests
    (uniqueness, gating, required arguments) cover new tools automatically.
-6. Update the tool table in `README.md`.
+6. Update the tool table in `guides/tools.md`.
 7. If the tool changes how an agent should sequence calls, update `GooglePlayMCP.instructions`
    in `Entry.swift` (a test checks that every `play_*` name it mentions exists) and any skill
    under `plugins/google-play-store/skills/` that should use it.
