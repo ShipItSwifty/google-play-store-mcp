@@ -55,6 +55,8 @@ Extracted from [ShipItSwifty](https://github.com/ShipItSwifty/shipitswifty), whi
 1. Add a `ToolSpec` to `PlayTools.readSpecs` or `PlayTools.writeSpecs` in
    `Sources/GooglePlayMCPServer/Tools/PlayTools.swift`. The JSON Schema is derived from the
    `arguments` array, so there is no separate schema to update and no dispatch `switch` to extend.
+   Declare constraints on the argument (`allowedValues`, `minimum`/`maximum`,
+   `exclusiveMinimum`/`exclusiveMaximum`) so hosts can reject a bad call before it reaches Play.
 2. Set `isReadOnly: false` for anything that changes Play state — that both gates it behind
    `GOOGLE_PLAY_ENABLE_WRITES` and sets the `destructiveHint` the host shows the user.
 3. Back it with a method on `GooglePlayClient` (in `GooglePlayReadAPI.swift`) rather than
