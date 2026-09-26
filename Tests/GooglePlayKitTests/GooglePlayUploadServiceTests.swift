@@ -54,6 +54,20 @@ struct GooglePlayUploadServiceTests {
         #expect(requests.contains { $0.path.hasSuffix(":commit") })
     }
 
+    @Test("a directory passed as the artifact fails before any edit is created")
+    func directoryArtifactCreatesNoEdit() async throws {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let (client, sessionID) = makeClient { _ in .json(#"{"id":"edit-1"}"#) }
+        let uploader = GooglePlayUploadService(client: client, packageName: "com.example.app")
+
+        await #expect(throws: GoogleAPIError.self) {
+            _ = try await uploader.uploadAndRelease(aabPath: directory.path, track: "internal")
+        }
+        #expect(MockURLProtocol.requests(for: sessionID).isEmpty)
+    }
+
     @Test("a missing artifact fails before any edit is created")
     func missingArtifactCreatesNoEdit() async throws {
         let (client, sessionID) = makeClient { _ in .json(#"{"id":"edit-1"}"#) }

@@ -28,17 +28,62 @@ struct ToolArgument: Sendable {
     let kind: Kind
     let description: String
     let isRequired: Bool
+    /// The only values the argument accepts, advertised as the schema's `enum`.
+    var allowedValues: [String]? = nil
+    /// Inclusive numeric bounds (`minimum` / `maximum`).
+    var minimum: Double? = nil
+    var maximum: Double? = nil
+    /// Exclusive numeric bounds (`exclusiveMinimum` / `exclusiveMaximum`), for ranges like Play's
+    /// `0 < userFraction < 1` that inclusive bounds cannot express.
+    var exclusiveMinimum: Double? = nil
+    var exclusiveMaximum: Double? = nil
 
-    static func string(_ name: String, _ description: String, required: Bool = false) -> ToolArgument {
-        ToolArgument(name: name, kind: .string, description: description, isRequired: required)
+    static func string(
+        _ name: String,
+        _ description: String,
+        required: Bool = false,
+        allowedValues: [String]? = nil
+    ) -> ToolArgument {
+        ToolArgument(
+            name: name, kind: .string, description: description, isRequired: required, allowedValues: allowedValues)
     }
 
-    static func integer(_ name: String, _ description: String) -> ToolArgument {
-        ToolArgument(name: name, kind: .integer, description: description, isRequired: false)
+    static func integer(_ name: String, _ description: String, minimum: Int? = nil, maximum: Int? = nil) -> ToolArgument {
+        ToolArgument(
+            name: name, kind: .integer, description: description, isRequired: false,
+            minimum: minimum.map { Double($0) }, maximum: maximum.map { Double($0) })
     }
 
-    static func number(_ name: String, _ description: String, required: Bool = false) -> ToolArgument {
-        ToolArgument(name: name, kind: .number, description: description, isRequired: required)
+    static func number(
+        _ name: String,
+        _ description: String,
+        required: Bool = false,
+        exclusiveMinimum: Double? = nil,
+        exclusiveMaximum: Double? = nil
+    ) -> ToolArgument {
+        ToolArgument(
+            name: name, kind: .number, description: description, isRequired: required,
+            exclusiveMinimum: exclusiveMinimum, exclusiveMaximum: exclusiveMaximum)
+    }
+
+    /// This argument's JSON Schema property.
+    var schema: Value {
+        var property: [String: Value] = [
+            "type": .string(kind.rawValue),
+            "description": .string(description),
+        ]
+        if let allowedValues {
+            property["enum"] = .array(allowedValues.map { Value.string($0) })
+        }
+        let bounds: [(String, Double?)] = [
+            ("minimum", minimum), ("maximum", maximum),
+            ("exclusiveMinimum", exclusiveMinimum), ("exclusiveMaximum", exclusiveMaximum),
+        ]
+        for case (let key, let bound?) in bounds {
+            // Integer bounds stay integers so the schema reads `"maximum": 100`, not `100.0`.
+            property[key] = kind == .integer ? .int(Int(bound)) : .double(bound)
+        }
+        return .object(property)
     }
 
     static func boolean(_ name: String, _ description: String) -> ToolArgument {
@@ -153,10 +198,7 @@ struct ToolSpec: Sendable {
     var tool: Tool {
         var properties: [String: Value] = [:]
         for argument in arguments {
-            properties[argument.name] = .object([
-                "type": .string(argument.kind.rawValue),
-                "description": .string(argument.description),
-            ])
+            properties[argument.name] = argument.schema
         }
 
         var schema: [String: Value] = [
