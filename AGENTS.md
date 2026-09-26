@@ -61,7 +61,7 @@ Extracted from [ShipItSwifty](https://github.com/ShipItSwifty/shipitswifty), whi
    assembling requests in the tool handler.
 4. Add tests in `Tests/GooglePlayMCPServerTests/PlayToolsTests.swift`. The catalog tests
    (uniqueness, gating, required arguments) cover new tools automatically.
-5. Update the tool table in `README.md`.
+5. Update the tool table in `guides/tools.md`.
 6. If the tool changes how an agent should sequence calls, update `GooglePlayMCP.instructions`
    in `Entry.swift` (a test checks that every `play_*` name it mentions exists) and any skill
    under `plugins/google-play-store/skills/` that should use it.

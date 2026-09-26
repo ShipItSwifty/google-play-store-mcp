@@ -230,5 +230,5 @@ run_if_selected windsurf install_windsurf
 
 if [[ "$ran_any" -eq 0 ]]; then
   echo "No supported MCP clients detected (claude, codex, ~/.cursor, ~/.codeium/windsurf)."
-  echo "See README.md for manual registration instructions."
+  echo "See guides/server-setup.md#register-with-a-client for manual registration instructions."
 fi
