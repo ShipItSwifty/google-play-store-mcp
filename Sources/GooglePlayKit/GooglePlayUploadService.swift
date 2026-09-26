@@ -70,15 +70,16 @@ public struct GooglePlayUploadService: Sendable {
         }
         try Self.validateRollout(status: status, userFraction: userFraction)
 
-        // Read the artifact before creating an edit: validates existence, and a missing file
-        // then fails without leaving an orphaned edit behind in the Play Console.
-        let artifactData: Data
+        // Check the artifact before creating an edit, so a missing or unreadable file fails
+        // without leaving an orphaned edit behind in the Play Console. The file itself is
+        // streamed during the upload, never loaded into memory.
+        let artifactURL: URL
         let isBundle: Bool
         if let aab = aabPath {
-            artifactData = try readArtifact(path: aab)
+            artifactURL = try checkedArtifact(path: aab)
             isBundle = true
         } else if let apk = apkPath {
-            artifactData = try readArtifact(path: apk)
+            artifactURL = try checkedArtifact(path: apk)
             isBundle = false
         } else {
             throw GoogleAPIError.invalidConfiguration(
@@ -94,10 +95,10 @@ public struct GooglePlayUploadService: Sendable {
             // 2. Upload artifact
             let versionCode: Int
             if isBundle {
-                versionCode = try await uploadBundleData(editId: edit.id, data: artifactData).versionCode
+                versionCode = try await uploadBundle(editId: edit.id, fileURL: artifactURL).versionCode
                 logger.info("Uploaded AAB versionCode=\(versionCode)")
             } else {
-                versionCode = try await uploadApkData(editId: edit.id, data: artifactData).versionCode
+                versionCode = try await uploadApk(editId: edit.id, fileURL: artifactURL).versionCode
                 logger.info("Uploaded APK versionCode=\(versionCode)")
             }
 
@@ -171,19 +172,19 @@ public struct GooglePlayUploadService: Sendable {
 
     // MARK: - Private
 
-    private func uploadBundleData(editId: String, data: Data) async throws -> GooglePlayBundle {
-        let responseData = try await client.uploadBinary(
+    private func uploadBundle(editId: String, fileURL: URL) async throws -> GooglePlayBundle {
+        let responseData = try await client.uploadFile(
             path: "/applications/\(packageName)/edits/\(editId)/bundles",
-            data: data,
+            fileURL: fileURL,
             contentType: "application/octet-stream"
         )
         return try decode(GooglePlayBundle.self, from: responseData, path: "edits/\(editId)/bundles")
     }
 
-    private func uploadApkData(editId: String, data: Data) async throws -> GooglePlayApk {
-        let responseData = try await client.uploadBinary(
+    private func uploadApk(editId: String, fileURL: URL) async throws -> GooglePlayApk {
+        let responseData = try await client.uploadFile(
             path: "/applications/\(packageName)/edits/\(editId)/apks",
-            data: data,
+            fileURL: fileURL,
             contentType: "application/vnd.android.package-archive"
         )
         return try decode(GooglePlayApk.self, from: responseData, path: "edits/\(editId)/apks")
@@ -222,11 +223,22 @@ public struct GooglePlayUploadService: Sendable {
         }
     }
 
-    private func readArtifact(path: String) throws -> Data {
+    /// Resolves the artifact path, failing unless it is a readable regular file.
+    ///
+    /// Reading the bytes used to prove this as a side effect; now that the upload streams the
+    /// file, the checks have to be explicit to keep failing before an edit exists.
+    private func checkedArtifact(path: String) throws -> URL {
         let url = URL(fileURLWithPath: path)
-        guard FileManager.default.fileExists(atPath: url.path) else {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
             throw GoogleAPIError.invalidConfiguration(reason: "Google Play: artifact not found at '\(path)'")
         }
-        return try Data(contentsOf: url)
+        guard !isDirectory.boolValue else {
+            throw GoogleAPIError.invalidConfiguration(reason: "Google Play: artifact path '\(path)' is a directory")
+        }
+        guard FileManager.default.isReadableFile(atPath: url.path) else {
+            throw GoogleAPIError.invalidConfiguration(reason: "Google Play: artifact at '\(path)' is not readable")
+        }
+        return url
     }
 }

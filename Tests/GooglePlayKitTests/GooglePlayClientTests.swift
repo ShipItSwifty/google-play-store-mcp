@@ -109,6 +109,46 @@ struct GooglePlayClientTests {
         }
     }
 
+    @Test("uploadFile streams a file to the media-upload endpoint and returns the response body")
+    func uploadFileSucceeds() async throws {
+        let file = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("\(UUID().uuidString).aab")
+        try Data("payload".utf8).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let (client, sessionID) = makeClient { _ in .json(#"{"value":"uploaded"}"#) }
+
+        let data = try await client.uploadFile(path: "/anything", fileURL: file, contentType: "application/octet-stream")
+
+        #expect(String(data: data, encoding: .utf8) == #"{"value":"uploaded"}"#)
+        let request = try #require(MockURLProtocol.requests(for: sessionID).first)
+        #expect(request.method == "POST")
+        #expect(request.path.hasPrefix("/upload/androidpublisher/v3"))
+        #expect(request.query?.contains("uploadType=media") == true)
+        // Whether a URLProtocol can see a file-backed body differs between Darwin and Linux
+        // Foundation, so the bytes are only compared when they are visible.
+        if let body = request.body, !body.isEmpty {
+            #expect(body == Data("payload".utf8))
+        }
+    }
+
+    @Test("uploadFile surfaces a non-2xx status as uploadFailed")
+    func uploadFileFails() async throws {
+        let file = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("\(UUID().uuidString).aab")
+        try Data("payload".utf8).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let (client, _) = makeClient { _ in .error(statusCode: 413, body: "too large") }
+
+        do {
+            _ = try await client.uploadFile(path: "/anything", fileURL: file, contentType: "application/octet-stream")
+            Issue.record("Expected uploadFile to throw")
+        } catch let error as GoogleAPIError {
+            guard case .uploadFailed(_, let reason) = error else {
+                Issue.record("Expected .uploadFailed, got \(error)")
+                return
+            }
+            #expect(reason.contains("413"))
+        }
+    }
+
     @Test("a non-2xx status is reported with the response body")
     func nonSuccessStatusThrowsAPIError() async throws {
         let (client, _) = makeClient { _ in .error(statusCode: 403, body: #"{"error":{"message":"nope"}}"#) }
