@@ -22,6 +22,17 @@ enum PlayTools {
         return raw == "1" || raw == "true" || raw == "yes"
     }
 
+    /// The package tools fall back to when a call omits `packageName`, from
+    /// `GOOGLE_PLAY_PACKAGE_NAME`.
+    ///
+    /// Most sessions are about one app, and without a default the agent has to ask for (or guess)
+    /// the package name on every call.
+    static func defaultPackageName(_ environment: [String: String] = ProcessInfo.processInfo.environment) -> String? {
+        guard let raw = environment["GOOGLE_PLAY_PACKAGE_NAME"]?.trimmingCharacters(in: .whitespaces), !raw.isEmpty
+        else { return nil }
+        return raw
+    }
+
     /// Every tool this server can serve, read tools first.
     static let allSpecs: [ToolSpec] = readSpecs + writeSpecs
 
@@ -35,6 +46,7 @@ enum PlayTools {
         name: String,
         arguments: [String: Value],
         writesEnabled: Bool,
+        defaultPackageName: String? = nil,
         clientProvider: @escaping ClientProvider
     ) async throws -> CallTool.Result {
         guard let spec = specs(writesEnabled: writesEnabled).first(where: { $0.name == name }) else {
@@ -50,7 +62,7 @@ enum PlayTools {
             }
             throw GoogleAPIError.invalidConfiguration(reason: "Unknown tool '\(name)'.")
         }
-        return try await spec.handler(ToolArguments(arguments), clientProvider)
+        return try await spec.handler(ToolArguments(arguments, defaultPackageName: defaultPackageName), clientProvider)
     }
 
     // MARK: - Read tools
@@ -59,8 +71,11 @@ enum PlayTools {
     /// past this, and it keeps a single tool result a reasonable size for the model.
     static let maxReviews = 500
 
+    /// Optional in the schema so a configured `GOOGLE_PLAY_PACKAGE_NAME` can stand in for it;
+    /// ``ToolArguments/packageName()`` still fails clearly when neither is present.
     private static let packageArgument = ToolArgument.string(
-        "packageName", "The app's package name, e.g. com.example.app.", required: true)
+        "packageName",
+        "The app's package name, e.g. com.example.app. Optional when the server has GOOGLE_PLAY_PACKAGE_NAME set.")
 
     static let readSpecs: [ToolSpec] = [
         ToolSpec(
@@ -73,7 +88,7 @@ enum PlayTools {
                 """,
             arguments: [packageArgument]
         ) { arguments, client in
-            let packageName = try arguments.require("packageName")
+            let packageName = try arguments.packageName()
             let overview = try await client().releaseOverview(packageName: packageName)
             let sections = [
                 render(tracks: overview.tracks, packageName: packageName),
@@ -92,7 +107,7 @@ enum PlayTools {
                 """,
             arguments: [packageArgument]
         ) { arguments, client in
-            let packageName = try arguments.require("packageName")
+            let packageName = try arguments.packageName()
             let tracks = try await client().listTracks(packageName: packageName)
             return .init(content: [.plainText(render(tracks: tracks, packageName: packageName))])
         },
@@ -105,7 +120,7 @@ enum PlayTools {
                 .string("track", "Track name: internal, alpha, beta, or production.", required: true),
             ]
         ) { arguments, client in
-            let packageName = try arguments.require("packageName")
+            let packageName = try arguments.packageName()
             let track = try await client().getTrack(packageName: packageName, track: try arguments.require("track"))
             return .init(content: [.plainText(render(tracks: [track], packageName: packageName))])
         },
@@ -115,7 +130,7 @@ enum PlayTools {
             description: "List the Android App Bundles (AABs) uploaded for an app, newest version code last.",
             arguments: [packageArgument]
         ) { arguments, client in
-            let packageName = try arguments.require("packageName")
+            let packageName = try arguments.packageName()
             let bundles = try await client().listBundles(packageName: packageName)
             return .init(content: [.plainText(render(bundles: bundles, packageName: packageName))])
         },
@@ -125,7 +140,7 @@ enum PlayTools {
             description: "List the APKs uploaded for an app, newest version code last.",
             arguments: [packageArgument]
         ) { arguments, client in
-            let packageName = try arguments.require("packageName")
+            let packageName = try arguments.packageName()
             let apks = try await client().listApks(packageName: packageName)
             return .init(content: [.plainText(render(apks: apks, packageName: packageName))])
         },
@@ -144,7 +159,7 @@ enum PlayTools {
                 .string("translationLanguage", "BCP 47 tag to translate reviews into, e.g. en-US."),
             ]
         ) { arguments, client in
-            let packageName = try arguments.require("packageName")
+            let packageName = try arguments.packageName()
             let reviews = try await client().listReviews(
                 packageName: packageName,
                 maxResults: arguments.int("maxResults", default: 50, max: maxReviews),
@@ -161,7 +176,7 @@ enum PlayTools {
                 """,
             arguments: [packageArgument]
         ) { arguments, client in
-            let packageName = try arguments.require("packageName")
+            let packageName = try arguments.packageName()
             let play = try client()
             let result = try await play.withReadOnlyEdit(packageName: packageName) { editId in
                 try await play.validateEdit(packageName: packageName, editId: editId)
@@ -197,7 +212,7 @@ enum PlayTools {
             ],
             isReadOnly: false
         ) { arguments, client in
-            let packageName = try arguments.require("packageName")
+            let packageName = try arguments.packageName()
             let track = try arguments.require("track")
             let status = try parseStatus(arguments.string("status"))
 
@@ -240,7 +255,7 @@ enum PlayTools {
             ],
             isReadOnly: false
         ) { arguments, client in
-            let packageName = try arguments.require("packageName")
+            let packageName = try arguments.packageName()
             let track = try arguments.require("track")
             let fraction = try arguments.requireDouble("userFraction")
             _ = try await client().updateRollout(packageName: packageName, track: track, userFraction: fraction)
@@ -257,7 +272,7 @@ enum PlayTools {
             ],
             isReadOnly: false
         ) { arguments, client in
-            let packageName = try arguments.require("packageName")
+            let packageName = try arguments.packageName()
             let track = try arguments.require("track")
             _ = try await client().haltRollout(packageName: packageName, track: track)
             return .init(content: [.plainText("Rollout for '\(track)' in \(packageName) halted.")])
@@ -276,7 +291,7 @@ enum PlayTools {
             ],
             isReadOnly: false
         ) { arguments, client in
-            let packageName = try arguments.require("packageName")
+            let packageName = try arguments.packageName()
             try await client().uploadDataSafetyLabels(
                 packageName: packageName,
                 safetyLabelsCSV: try arguments.require("safetyLabelsCSV")

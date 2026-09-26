@@ -64,16 +64,31 @@ struct PlayToolCatalogTests {
         #expect(Set(names).count == names.count)
     }
 
-    @Test("every tool declares packageName as required, and its schema says so")
-    func schemaMarksRequiredArguments() throws {
+    @Test("every tool accepts packageName, optional in the schema so GOOGLE_PLAY_PACKAGE_NAME can default it")
+    func schemaDeclaresPackageName() throws {
         for spec in PlayTools.allSpecs {
-            let schema = spec.tool.inputSchema
-            guard case .object(let root) = schema, case .array(let required)? = root["required"] else {
-                Issue.record("\(spec.name) has no required arguments")
+            guard case .object(let root) = spec.tool.inputSchema, case .object(let properties)? = root["properties"]
+            else {
+                Issue.record("\(spec.name) has no properties")
                 continue
             }
-            #expect(required.contains(.string("packageName")), "\(spec.name) should require packageName")
+            #expect(properties["packageName"] != nil, "\(spec.name) should accept packageName")
+            if case .array(let required)? = root["required"] {
+                #expect(!required.contains(.string("packageName")), "\(spec.name) should not require packageName")
+            }
         }
+    }
+
+    @Test(
+        "GOOGLE_PLAY_PACKAGE_NAME is read, trimmed, and ignored when blank",
+        arguments: [
+            (["GOOGLE_PLAY_PACKAGE_NAME": "com.example.app"], "com.example.app" as String?),
+            (["GOOGLE_PLAY_PACKAGE_NAME": "  com.example.app "], "com.example.app"),
+            (["GOOGLE_PLAY_PACKAGE_NAME": "   "], nil),
+            ([:], nil),
+        ])
+    func defaultPackageNameParsing(environment: [String: String], expected: String?) {
+        #expect(PlayTools.defaultPackageName(environment) == expected)
     }
 }
 
@@ -171,6 +186,52 @@ struct PlayToolDispatchTests {
             Issue.record("Expected a missing-argument error")
         } catch let error as GoogleAPIError {
             #expect(error.localizedDescription.contains("packageName"))
+        }
+    }
+}
+
+@Suite("Default package name")
+struct DefaultPackageNameTests {
+
+    @Test("the configured default fills in an omitted packageName")
+    func defaultFillsIn() throws {
+        let arguments = ToolArguments([:], defaultPackageName: "com.example.default")
+        #expect(try arguments.packageName() == "com.example.default")
+    }
+
+    @Test("an explicit packageName wins over the default")
+    func explicitWins() throws {
+        let arguments = ToolArguments(["packageName": .string("com.example.other")], defaultPackageName: "com.example.default")
+        #expect(try arguments.packageName() == "com.example.other")
+    }
+
+    @Test("with neither, the error names the environment variable that would fix it")
+    func missingBothExplains() {
+        do {
+            _ = try ToolArguments([:]).packageName()
+            Issue.record("Expected a missing packageName error")
+        } catch let error as GoogleAPIError {
+            #expect(error.localizedDescription.contains("GOOGLE_PLAY_PACKAGE_NAME"))
+        } catch {
+            Issue.record("Unexpected error \(error)")
+        }
+    }
+
+    @Test("dispatch passes the default through to the handler")
+    func dispatchUsesDefault() async throws {
+        // The handler reaches for the client only after resolving the package name, so a
+        // client-construction error proves the default satisfied the argument check.
+        do {
+            _ = try await PlayTools.call(
+                name: "play_list_tracks",
+                arguments: [:],
+                writesEnabled: false,
+                defaultPackageName: "com.example.default",
+                clientProvider: unusedClient
+            )
+            Issue.record("Expected the stub client provider to throw")
+        } catch let error as GoogleAPIError {
+            #expect(error.localizedDescription.contains("should not be constructed"))
         }
     }
 }
