@@ -119,11 +119,17 @@ MCP server and adds three skills that tell the agent how to combine the tools:
 /plugin install google-play-store@shipitswifty-google-play
 ```
 
-The plugin launches `google-play-store-mcp` from your `PATH` and passes through your shell
-environment. Export `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH` (and `GOOGLE_PLAY_ENABLE_WRITES=1` if
-you want the rollout skill to act) before starting Claude Code. If you already registered the
-server with `install-mcp.sh`, you can keep that registration and use only the skills. Both are
-named `google-play-store`, so you get one server either way.
+Install `google-play-store-mcp` on your `PATH` before enabling the plugin (on macOS,
+`brew install shipitswifty/tap/google-play-store-mcp`). The plugin's bundled launcher starts
+that executable. Claude Code prompts for a service account key file, an optional default
+package, and whether to enable writes. The plugin supplies those values explicitly and clears
+the other credential variables, so an inherited shell key cannot override the selected file.
+Writes default to disabled even if your shell enables them.
+
+Use one registration for the server; installing the plugin alongside a manual registration can
+expose duplicate tools. The plugin's MCP tools currently target Claude Code. Chat ignores local
+servers, and Cowork skips this server's required credential configuration without a default.
+See [Claude directory and MCP 2.0](claude-directory.md) for submission and hosted connector work.
 
 The skills are plain `SKILL.md` files in
 [`plugins/google-play-store/skills`](../plugins/google-play-store/skills). Other agents that read the
@@ -133,7 +139,8 @@ same format (for example, Codex under `~/.codex/skills`) can use them as-is.
 
 | Symptom | Likely cause |
 |---|---|
-| `No Google Play credentials found` | None of the credential variables reached the server process. With the plugin, export them in the shell that starts Claude Code. With `install-mcp.sh`, re-run it with `--service-account-path`. |
+| `No Google Play credentials found` | With the plugin, configure the service account key file in Claude Code. With `install-mcp.sh`, re-run it with `--service-account-path`. |
+| Plugin launcher cannot find `google-play-store-mcp` | Install the server and put it on the `PATH` of the process that starts Claude Code. |
 | `Could not read a Google service account key` | The file is not a service-account key. An OAuth client secret (`"installed"`/`"web"`) is a common mix-up. |
 | `403 … PERMISSION_DENIED` | The service account is not invited in Play Console, lacks the permission for that app, or was invited recently and the grant has not propagated yet. |
 | `404` on an app | Wrong `packageName`, or the app has never had a build uploaded in the Play Console. |

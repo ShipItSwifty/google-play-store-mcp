@@ -1,6 +1,7 @@
 {
   "name": "google-play-store",
-  "displayName": "Google Play Store",
+  "displayName": "Google Play Store by ShipItSwifty",
+  "version": "0.1.0",
   "description": "Inspect Play tracks, staged rollouts, uploaded artifacts, and recent reviews, and drive a staged rollout safely.",
   "author": {
     "name": "ShipItSwifty",
@@ -9,5 +10,26 @@
   "homepage": "https://github.com/ShipItSwifty/google-play-store-mcp",
   "repository": "https://github.com/ShipItSwifty/google-play-store-mcp",
   "license": "MIT",
-  "keywords": ["android", "google-play", "release", "mcp"]
+  "keywords": ["android", "google-play", "release", "mcp"],
+  "userConfig": {
+    "service_account_path": {
+      "type": "file",
+      "title": "Google Play service account key",
+      "description": "Select a service account JSON key with access to your app in Play Console. The local server reads this file to authenticate with Google.",
+      "required": true,
+      "sensitive": true
+    },
+    "package_name": {
+      "type": "string",
+      "title": "Default Android package",
+      "description": "Optional app package, such as com.example.app. Tool calls can override it.",
+      "default": ""
+    },
+    "enable_writes": {
+      "type": "boolean",
+      "title": "Enable release writes",
+      "description": "Allow tools that publish releases, change or halt rollouts, and upload Data safety declarations. These actions change real Play Store state.",
+      "default": false
+    }
+  }
 }
