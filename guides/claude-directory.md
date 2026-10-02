@@ -17,15 +17,15 @@ platform-specific binaries in the repository, and automatic downloads. External 
 resolution can still receive a reviewer hold; local CLI validation does not prove directory
 acceptance. See the [official checklist](https://claude.com/docs/plugins/pre-submission-checklist).
 
-The earlier suggestion to copy `.build/release/google-play-store-mcp` into the plugin needs
-revision: the fresh local release binary measured 9.6 MiB, while the portal rejects plugin files
-over 5 MiB. Smaller compiled executables still receive a reviewer hold. A future bundled
-distribution needs supported-platform artifacts, size checks, and a repeatable packaging step.
+Bundling `.build/release/google-play-store-mcp` in the plugin is not viable: the local release
+binary measures 9.6 MiB, while the portal rejects plugin files over 5 MiB. Smaller compiled executables still receive a
+reviewer hold. A future bundled distribution needs supported-platform artifacts, size checks, and a repeatable packaging step.
 
 ## Submit for review
 
-1. Commit and push the plugin changes to the branch intended for distribution. Keep the plugin
-   version current on each release.
+1. Commit and push the plugin changes to the branch intended for distribution. Set `version` in
+   `plugins/google-play-store/.claude-plugin/plugin.json` to the release tag before tagging; the
+   release workflow fails if they differ, because the field pins installed plugins.
 2. Run `claude plugin validate ./plugins/google-play-store --strict`, and exercise its skills
    in Claude Code with a real account. Local validation checks schema, not directory policy or
    successful Play authentication.

@@ -16,8 +16,7 @@
       "type": "file",
       "title": "Google Play service account key",
       "description": "Select a service account JSON key with access to your app in Play Console. The local server reads this file to authenticate with Google.",
-      "required": true,
-      "sensitive": true
+      "required": true
     },
     "package_name": {
       "type": "string",
