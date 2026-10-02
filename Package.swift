@@ -20,7 +20,7 @@ let package = Package(
         // 5.0.0, and both packages must resolve to the same swift-crypto version inside
         // ShipItSwifty's dependency graph. 4.5.1 fixes CVE-2026-28815 (X-Wing HPKE decapsulation
         // accepting malformed ciphertext length); pin the floor there.
-        .package(url: "https://github.com/apple/swift-crypto", from: "4.5.2"),
+        .package(url: "https://github.com/apple/swift-crypto", from: "5.0.0"),
         .package(url: "https://github.com/apple/swift-log", from: "1.12.0"),
         // Pin the public upstream PR for object-valued experimental capabilities sent by Codex.
         // Return to an upstream release once it includes this decoding fix.
