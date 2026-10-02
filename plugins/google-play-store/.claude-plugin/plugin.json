@@ -1,7 +1,7 @@
 {
   "name": "google-play-store",
   "displayName": "Google Play Store by ShipItSwifty",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Inspect Play tracks, staged rollouts, uploaded artifacts, and recent reviews, and drive a staged rollout safely.",
   "author": {
     "name": "ShipItSwifty",
