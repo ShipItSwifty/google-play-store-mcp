@@ -22,7 +22,7 @@ let package = Package(
         // accepting malformed ciphertext length); pin the floor there.
         .package(url: "https://github.com/apple/swift-crypto", from: "5.0.0"),
         .package(url: "https://github.com/apple/swift-log", from: "1.12.0"),
-        // Pin the public upstream PR for object-valued experimental capabilities sent by Codex.
+        // Pin upstream PR #276 for object-valued experimental capabilities sent by Codex.
         // Return to an upstream release once it includes this decoding fix.
         .package(
             url: "https://github.com/nstrm/swift-sdk.git",

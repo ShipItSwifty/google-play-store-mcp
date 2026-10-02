@@ -33,6 +33,7 @@ for what the server can do and how each tool has been verified.
 | [Server setup](guides/server-setup.md) | Service account permissions, credentials, client registration, plugin, and troubleshooting. |
 | [MCP tools](guides/tools.md) | Tool catalog, live verification status, Play API limits, and example prompts. |
 | [Development and releases](guides/development.md) | Build, tests, coverage, smoke test, and release workflow. |
+| [Claude directory and MCP 2.0](guides/claude-directory.md) | Plugin submission, supported Claude surfaces, SDK status, and protocol migration work. |
 
 ## License
 

@@ -1,7 +1,15 @@
 {
   "mcpServers": {
     "google-play-store": {
-      "command": "google-play-store-mcp"
+      "command": "${CLAUDE_PLUGIN_ROOT}/scripts/start-server.sh",
+      "args": [],
+      "env": {
+        "GOOGLE_PLAY_SERVICE_ACCOUNT_JSON": "",
+        "GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH": "${user_config.service_account_path}",
+        "GOOGLE_APPLICATION_CREDENTIALS": "",
+        "GOOGLE_PLAY_PACKAGE_NAME": "${user_config.package_name}",
+        "GOOGLE_PLAY_ENABLE_WRITES": "${user_config.enable_writes}"
+      }
     }
   }
 }

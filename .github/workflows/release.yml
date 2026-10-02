@@ -28,8 +28,28 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify-plugin-version:
+    name: Verify plugin version matches tag
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          ref: ${{ env.RELEASE_VERSION }}
+
+      # plugin.json pins installed plugins to its version, so a tag that ships a stale value
+      # would never reach users. Bump it in the commit being tagged.
+      - name: Check plugin.json version
+        run: |
+          actual=$(jq -r '.version' plugins/google-play-store/.claude-plugin/plugin.json)
+          if [ "${actual}" != "${RELEASE_VERSION}" ]; then
+            echo "::error::plugin.json version is ${actual}; it must equal ${RELEASE_VERSION} before tagging."
+            exit 1
+          fi
+
   build-macos:
     name: Build macOS Universal Binary
+    needs: verify-plugin-version
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
@@ -94,6 +114,7 @@ jobs:
 
   build-linux:
     name: Build Linux Binary
+    needs: verify-plugin-version
     runs-on: ubuntu-24.04
     container:
       image: swift:6.3-noble
