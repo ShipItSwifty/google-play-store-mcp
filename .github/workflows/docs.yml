@@ -38,6 +38,7 @@ jobs:
             --target GoogleAuthKit \
             --target GooglePlayKit \
             --enable-experimental-combined-documentation \
+            --warnings-as-errors \
             --disable-indexing \
             --transform-for-static-hosting \
             --hosting-base-path google-play-store-mcp \

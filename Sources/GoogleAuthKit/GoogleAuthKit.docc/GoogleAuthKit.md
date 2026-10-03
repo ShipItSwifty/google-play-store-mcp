@@ -10,7 +10,7 @@ It is scope-agnostic: the same types back the Play Developer API (``GoogleServic
 Firebase App Distribution (``GoogleServiceAccountJWTGenerator/Scope/cloudPlatform``), or any
 scope you construct.
 
-It depends only on Foundation and `swift-crypto`. Nothing shells out, so it runs unchanged on
+It depends on Foundation, `swift-crypto`, and `swift-log`. Nothing shells out, so it runs unchanged on
 macOS and Linux.
 
 ```swift

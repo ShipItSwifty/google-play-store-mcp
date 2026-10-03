@@ -7,6 +7,7 @@ type, `Sendable` throughout, nothing shells out) and the checklist for adding an
 swift build
 swift test --enable-code-coverage --no-parallel
 scripts/coverage-gate.sh
+scripts/check-library-consumer.sh
 xcrun swift-format lint --recursive --strict --configuration .swift-format Sources Tests
 ```
 
@@ -43,7 +44,7 @@ rather than committed, so the app does not change. No test uploads an artifact o
 ## Coverage
 
 `scripts/coverage-gate.sh` enforces a line-coverage floor over product code only. CI sets
-`MIN_LINE_COVERAGE: "78"`; actual coverage is ~81%. Raise the floor as coverage climbs.
+`MIN_LINE_COVERAGE: "85"`; actual coverage is ~87%. Raise the floor as coverage climbs.
 
 ## Releasing
 

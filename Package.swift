@@ -15,19 +15,13 @@ let package = Package(
         .executable(name: "google-play-store-mcp", targets: ["GooglePlayMCPServer"]),
     ],
     dependencies: [
-        // Stays on the 4.x line: see app-store-connect-mcp's swift-crypto comment — jwt-kit's
-        // transitive dependency on apple/swift-certificates still hard-caps swift-crypto below
-        // 5.0.0, and both packages must resolve to the same swift-crypto version inside
-        // ShipItSwifty's dependency graph. 4.5.1 fixes CVE-2026-28815 (X-Wing HPKE decapsulation
-        // accepting malformed ciphertext length); pin the floor there.
-        .package(url: "https://github.com/apple/swift-crypto", from: "5.0.0"),
+        // Support Crypto 4.x consumers (including ShipItSwifty) and Crypto 5.x.
+        // 4.5.2 includes the RSA key-size fixes used by service-account signing.
+        .package(url: "https://github.com/apple/swift-crypto", "4.5.2"..<"6.0.0"),
         .package(url: "https://github.com/apple/swift-log", from: "1.12.0"),
-        // Pin upstream PR #276 for object-valued experimental capabilities sent by Codex.
-        // Return to an upstream release once it includes this decoding fix.
-        .package(
-            url: "https://github.com/nstrm/swift-sdk.git",
-            revision: "f7077e0d5cd57e0b2a497862017aa94ee344252f"
-        ),
+        // Unsupported experimental capabilities are filtered by CapabilityCompatibleTransport
+        // until upstream PR #276 lands, keeping the libraries consumable through SemVer.
+        .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", from: "0.12.1"),
         // Documentation only; contributes no code to any product.
         .package(url: "https://github.com/apple/swift-docc-plugin", from: "1.5.0"),
     ],

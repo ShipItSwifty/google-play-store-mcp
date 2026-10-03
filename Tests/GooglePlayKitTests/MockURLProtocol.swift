@@ -9,9 +9,14 @@ import FoundationNetworking
 struct MockHTTPResponse: Sendable {
     let statusCode: Int
     let body: Data
+    var transportError: URLError? = nil
 
     static func json(_ json: String, statusCode: Int = 200) -> MockHTTPResponse {
         MockHTTPResponse(statusCode: statusCode, body: Data(json.utf8))
+    }
+
+    static func failure() -> MockHTTPResponse {
+        MockHTTPResponse(statusCode: 0, body: Data(), transportError: URLError(.timedOut))
     }
 
     static func empty(statusCode: Int = 204) -> MockHTTPResponse {
@@ -121,6 +126,10 @@ final class MockURLProtocol: URLProtocol, @unchecked Sendable {
         }
 
         let mock = handler(request)
+        if let error = mock.transportError {
+            client?.urlProtocol(self, didFailWithError: error)
+            return
+        }
         let response = HTTPURLResponse(
             url: request.url!,
             statusCode: mock.statusCode,

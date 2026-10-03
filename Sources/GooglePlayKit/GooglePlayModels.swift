@@ -7,7 +7,7 @@ import Foundation
 public struct GooglePlayEdit: Codable, Sendable {
     /// Unique edit identifier returned by the Edits API.
     public let id: String
-    /// RFC 3339 expiry timestamp for this edit session.
+    /// Expiry time in seconds since the Unix epoch, encoded as a string.
     public let expiryTimeSeconds: String?
 
     public init(id: String, expiryTimeSeconds: String? = nil) {
@@ -91,23 +91,44 @@ public struct GooglePlayRelease: Codable, Sendable {
     public let versionCodes: [String]?
     /// Release status.
     public let status: GooglePlayReleaseStatus
-    /// Staged rollout fraction (0.0–1.0). Only meaningful for `.inProgress`.
+    /// Staged rollout fraction, strictly between 0 and 1, for `.inProgress` or `.halted`.
     public let userFraction: Double?
     /// Per-language release notes.
     public let releaseNotes: [GooglePlayReleaseNote]?
+    /// Countries targeted by an in-progress production release.
+    public let countryTargeting: GooglePlayCountryTargeting?
+    /// In-app update priority (0–5), fixed once the release is rolled out.
+    public let inAppUpdatePriority: Int?
 
     public init(
         name: String? = nil,
         versionCodes: [String]? = nil,
         status: GooglePlayReleaseStatus,
         userFraction: Double? = nil,
-        releaseNotes: [GooglePlayReleaseNote]? = nil
+        releaseNotes: [GooglePlayReleaseNote]? = nil,
+        countryTargeting: GooglePlayCountryTargeting? = nil,
+        inAppUpdatePriority: Int? = nil
     ) {
         self.name = name
         self.versionCodes = versionCodes
         self.status = status
         self.userFraction = userFraction
         self.releaseNotes = releaseNotes
+        self.countryTargeting = countryTargeting
+        self.inAppUpdatePriority = inAppUpdatePriority
+    }
+}
+
+/// Country restrictions attached to a production release.
+public struct GooglePlayCountryTargeting: Codable, Sendable {
+    /// Two-letter CLDR country codes, such as `US` and `CA`.
+    public let countries: [String]?
+    /// Whether countries outside the explicit list are also included.
+    public let includeRestOfWorld: Bool?
+
+    public init(countries: [String]? = nil, includeRestOfWorld: Bool? = nil) {
+        self.countries = countries
+        self.includeRestOfWorld = includeRestOfWorld
     }
 }
 

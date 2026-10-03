@@ -52,7 +52,12 @@ public struct GoogleServiceAccountCredentials: Sendable {
                 reason: "Google service account JSON not found at '\(jsonPath)'"
             )
         }
-        try self.init(json: try Data(contentsOf: url))
+        let data: Data
+        do { data = try Data(contentsOf: url) } catch {
+            throw GoogleAPIError.invalidConfiguration(
+                reason: "Could not read service account JSON at '\(jsonPath)': \(error.localizedDescription)")
+        }
+        try self.init(json: data)
     }
 
     /// Resolves credentials from the conventional environment variables, in priority order:

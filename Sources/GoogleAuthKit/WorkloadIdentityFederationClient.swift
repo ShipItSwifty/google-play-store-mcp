@@ -90,6 +90,12 @@ public actor WorkloadIdentityFederationClient: Sendable {
         return try await fetchNewToken()
     }
 
+    private func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        do { return try await transport(request) } catch let error as GoogleAPIError { throw error } catch {
+            throw GoogleAPIError.apiError(statusCode: 0, body: "Authentication request failed: \(error.localizedDescription)")
+        }
+    }
+
     // MARK: - Private
 
     private func fetchNewToken() async throws -> String {
@@ -132,7 +138,7 @@ public actor WorkloadIdentityFederationClient: Sendable {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(requestToken)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await transport(request)
+        let (data, response) = try await send(request)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             throw GoogleAPIError.apiError(
@@ -168,7 +174,7 @@ public actor WorkloadIdentityFederationClient: Sendable {
                 subjectToken: githubToken
             ))
 
-        let (data, response) = try await transport(request)
+        let (data, response) = try await send(request)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             throw GoogleAPIError.apiError(statusCode: status, body: String(data: data, encoding: .utf8) ?? "")
@@ -197,7 +203,7 @@ public actor WorkloadIdentityFederationClient: Sendable {
         request.httpBody = try JSONEncoder().encode(
             GenerateAccessTokenRequest(scope: ["https://www.googleapis.com/auth/cloud-platform"]))
 
-        let (data, response) = try await transport(request)
+        let (data, response) = try await send(request)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             let body = String(data: data, encoding: .utf8) ?? ""

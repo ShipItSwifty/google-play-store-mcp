@@ -1,7 +1,10 @@
 # Libraries
 
+Browse the [DocC API reference](https://shipitswifty.github.io/google-play-store-mcp/), including
+the release walkthrough and edit lifecycle. The package requires Swift 6.3 and supports Crypto 4.5.2 through 5.x.
+
 ```swift
-.package(url: "https://github.com/ShipItSwifty/google-play-store-mcp.git", from: "0.1.0")
+.package(url: "https://github.com/ShipItSwifty/google-play-store-mcp.git", from: "0.2.1")
 ```
 
 ```swift
@@ -34,7 +37,7 @@ print(overview.bundles.map(\.versionCode).max() ?? 0)
 let uploader = GooglePlayUploadService(client: client, packageName: "com.example.app")
 let versionCode = try await uploader.uploadAndRelease(
     aabPath: "./build/app-release.aab",
-    track: "internal",
+    track: "production",
     releaseNotes: [GooglePlayReleaseNote(language: "en-US", text: "Bug fixes")],
     status: .inProgress,
     userFraction: 0.1
@@ -54,8 +57,9 @@ all live under `/edits/{editId}/…`. An edit only changes the app when it is **
 abandoned one shows up in the Play Console as a pending change that blocks a human from starting
 their own.
 
-`withReadOnlyEdit(packageName:_:)` therefore creates an edit, runs the read, and always deletes
-it — never commits. Every read helper (`listTracks`, `getTrack`, `listBundles`, `listApks`,
+`withReadOnlyEdit(packageName:_:)` therefore creates an edit, runs the read, and attempts to delete
+it — never commits. Deletion failure after a successful read is reported; deletion failure after
+a failed read does not replace the original error. Every read helper (`listTracks`, `getTrack`, `listBundles`, `listApks`,
 `releaseOverview`) goes through it, and `GooglePlayUploadService` deletes its edit if the upload
 fails partway. Reads that are not edit-scoped (`listReviews`) create no edit at all.
 

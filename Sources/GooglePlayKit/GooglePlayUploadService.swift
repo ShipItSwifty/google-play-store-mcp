@@ -51,8 +51,8 @@ public struct GooglePlayUploadService: Sendable {
     ///   - track: Play Store track (e.g. `"internal"`, `"alpha"`, `"beta"`, `"production"`).
     ///   - releaseName: Internal release name shown in the Play Console.
     ///   - releaseNotes: Per-language release notes.
-    ///   - status: Release status (`.completed`, `.inProgress`, `.draft`).
-    ///   - userFraction: Rollout fraction (0.0–1.0). Only used with `.inProgress` status.
+    ///   - status: Release status (`.completed`, `.inProgress`, `.halted`, `.draft`).
+    ///   - userFraction: Fraction strictly between 0 and 1, used with `.inProgress` or `.halted`.
     /// - Returns: The version code of the uploaded artifact.
     @discardableResult
     public func uploadAndRelease(
@@ -117,7 +117,7 @@ public struct GooglePlayUploadService: Sendable {
             // 4. Commit edit
             logger.info("Committing Play Store edit \(edit.id)")
             try await client.commitEdit(packageName: packageName, editId: edit.id)
-            logger.info("Play Store edit committed. versionCode=\(versionCode) is live on track '\(track)'")
+            logger.info("Play Store edit committed. versionCode=\(versionCode) is committed to track '\(track)'")
 
             return versionCode
         } catch {

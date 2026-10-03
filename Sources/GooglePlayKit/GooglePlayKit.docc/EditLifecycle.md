@@ -9,14 +9,14 @@ them you open an edit, work inside it, and then either **commit** it, which appl
 atomically, or **delete** it, which discards them.
 
 An abandoned edit is not harmless. It shows in the Play Console as a pending change and blocks a
-person from starting their own edit until it expires. GooglePlayKit therefore never leaves one
-behind.
+person from starting their own edit until it expires. GooglePlayKit therefore attempts to delete every throwaway or failed edit.
 
 ### Reads
 
 ``GooglePlayClient/withReadOnlyEdit(packageName:_:)`` creates an edit, runs your closure, and
 deletes the edit on both the success and failure paths. It never commits. Every read helper goes
-through it.
+through it. A deletion failure after a successful read is thrown to the caller. When the read
+itself fails, cleanup is best effort and its error cannot mask the original failure.
 
 Each edit costs a create and a delete round trip. When you need several edit-scoped reads, do them
 inside one edit. ``GooglePlayClient/releaseOverview(packageName:)`` reads tracks, bundles, and APKs

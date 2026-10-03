@@ -46,7 +46,7 @@ Source: [Submit your plugin](https://claude.com/docs/plugins/submit).
 
 The stable specification is **2026-07-28**; it has already shipped. Claude's
 [plugin announcement](https://claude.com/blog/build-plugins-for-claude) says Claude supports it.
-The pinned SDK in `Package.swift` still advertises a latest protocol of `2025-11-25` and uses
+The released SDK in `Package.swift` still advertises a latest protocol of `2025-11-25` and uses
 `initialize`. This server therefore does **not** implement MCP 2.0 today. The submission
 checklist does not make MCP 2.0 a prerequisite for a local plugin bundle.
 
@@ -55,13 +55,13 @@ Upstream's latest published Swift SDK is currently
 Its release does not supply the modern request lifecycle. A stateless HTTP transport by itself
 does not implement the 2026 protocol.
 
-Keep the current `nstrm/swift-sdk` revision until an upstream release contains the client
-capability decoding fix. The matching PR is
-[#276](https://github.com/modelcontextprotocol/swift-sdk/pull/276), at the pinned `f7077e0`
-commit, and remains open. [#289](https://github.com/modelcontextprotocol/swift-sdk/pull/289)
-adds **server** capability fields; it is separate and also remains open. Merging #289 alone
-is not a reason to remove the fork. Preserve the nested-capability regression coverage when
-changing dependencies.
+The package uses the official SDK 0.12.1 through SemVer. Until upstream
+[#276](https://github.com/modelcontextprotocol/swift-sdk/pull/276) supplies arbitrary JSON
+experimental capabilities, `CapabilityCompatibleTransport` filters non-string experimental
+values from initialization. This server does not use experimental client capabilities; standard
+capabilities and tool messages pass through. Wire regression tests cover Codex initialization.
+This avoids a revision dependency, which SwiftPM rejects when a consumer installs the libraries
+through a version tag.
 
 ## Protocol migration work
 

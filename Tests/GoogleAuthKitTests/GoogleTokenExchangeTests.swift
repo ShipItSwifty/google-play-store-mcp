@@ -31,6 +31,14 @@ private func testCredentials() -> GoogleServiceAccountCredentials {
 @Suite("Google OAuth2 token exchange")
 struct GoogleTokenExchangeTests {
 
+    @Test("OAuth transport failures use GoogleAPIError")
+    func transportFailure() async throws {
+        let generator = GoogleServiceAccountJWTGenerator(credentials: testCredentials()) { _ in
+            throw URLError(.timedOut)
+        }
+        await #expect(throws: GoogleAPIError.self) { _ = try await generator.cachedOrNewToken() }
+    }
+
     @Test("a signed assertion is exchanged for an access token")
     func exchangesAssertionForToken() async throws {
         let counter = ExchangeCounter()

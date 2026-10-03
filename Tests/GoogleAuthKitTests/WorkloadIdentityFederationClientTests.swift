@@ -205,7 +205,7 @@ struct WorkloadIdentityFederationClientTests {
 
     @Test("an unparseable expireTime is reported rather than silently treated as expired")
     func badExpireTimeThrows() async throws {
-        try await withGitHubOIDCEnvironment {
+        await withGitHubOIDCEnvironment {
             let client = WorkloadIdentityFederationClient(
                 provider: provider, serviceAccountEmail: serviceAccount,
                 transport: makeTransport(

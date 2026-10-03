@@ -153,6 +153,77 @@ struct GooglePlayReadAPITests {
         #expect(requests.contains { $0.method == "DELETE" && $0.path.hasSuffix("/edits/edit-2") })
     }
 
+    @Test("a successful read reports cleanup failure without retrying deletion")
+    func successfulReadCleanupFailure() async throws {
+        let (client, sessionID) = makeClient { request in
+            if request.httpMethod == "POST" { return .json(#"{"id":"cleanup"}"#) }
+            if request.httpMethod == "DELETE" { return .error(statusCode: 503, body: "cleanup failed") }
+            return .json(#"{"tracks":[]}"#)
+        }
+        do {
+            _ = try await client.listTracks(packageName: "com.example.app")
+            Issue.record("Expected cleanup failure")
+        } catch let error as GoogleAPIError {
+            guard case .apiError(let status, _) = error else {
+                Issue.record("Unexpected error")
+                return
+            }
+            #expect(status == 503)
+        }
+        #expect(MockURLProtocol.requests(for: sessionID).filter { $0.method == "DELETE" }.count == 1)
+    }
+
+    @Test("cleanup failure preserves the original read error")
+    func failedReadCleanupFailure() async throws {
+        let (client, _) = makeClient { request in
+            if request.httpMethod == "POST" { return .json(#"{"id":"cleanup"}"#) }
+            if request.httpMethod == "DELETE" { return .error(statusCode: 503, body: "cleanup failed") }
+            return .error(statusCode: 403, body: "read denied")
+        }
+        do {
+            _ = try await client.listTracks(packageName: "com.example.app")
+            Issue.record("Expected read failure")
+        } catch let error as GoogleAPIError {
+            guard case .apiError(let status, let body) = error else {
+                Issue.record("Unexpected error")
+                return
+            }
+            #expect(status == 403)
+            #expect(body == "read denied")
+        }
+    }
+
+    @Test("rollout mutations preserve targeting and update priority on every release", arguments: [false, true])
+    func rolloutPreservesReleaseMetadata(halt: Bool) async throws {
+        let (client, sessionID) = makeClient { request in
+            if request.httpMethod == "POST" { return .json(#"{"id":"metadata"}"#) }
+            if request.httpMethod == "GET" {
+                return .json(
+                    #"{"track":"production","releases":[{"name":"old","versionCodes":["400"],"status":"completed","inAppUpdatePriority":3},{"name":"new","versionCodes":["412"],"status":"inProgress","userFraction":0.1,"countryTargeting":{"countries":["US","CA"],"includeRestOfWorld":false},"inAppUpdatePriority":5}]}"#
+                )
+            }
+            if request.httpMethod == "PUT" { return .json(#"{"track":"production"}"#) }
+            return .empty()
+        }
+        if halt {
+            _ = try await client.haltRollout(packageName: "com.example.app", track: "production")
+        } else {
+            _ = try await client.updateRollout(packageName: "com.example.app", track: "production", userFraction: 0.5)
+        }
+        let request = try #require(MockURLProtocol.requests(for: sessionID).first { $0.method == "PUT" })
+        let track = try JSONDecoder().decode(GooglePlayTrack.self, from: #require(request.body))
+        let releases = try #require(track.releases)
+        #expect(releases.count == 2)
+        #expect(releases[0].versionCodes == ["400"])
+        #expect(releases[0].status == .completed)
+        #expect(releases[0].inAppUpdatePriority == 3)
+        #expect(releases[1].countryTargeting?.countries == ["US", "CA"])
+        #expect(releases[1].countryTargeting?.includeRestOfWorld == false)
+        #expect(releases[1].inAppUpdatePriority == 5)
+        #expect(releases[1].status == (halt ? .halted : .inProgress))
+        #expect(releases[1].userFraction == (halt ? 0.1 : 0.5))
+    }
+
     @Test("getTrack returns the single requested track")
     func getTrackReadsOneTrack() async throws {
         let (client, _) = makeClient { request in

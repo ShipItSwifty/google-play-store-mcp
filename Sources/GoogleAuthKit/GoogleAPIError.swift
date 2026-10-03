@@ -6,13 +6,14 @@ import Foundation
 /// error domain (ShipItSwifty maps them onto `ShipItError`) needs exactly one bridge,
 /// not one per module.
 public enum GoogleAPIError: Error, Sendable {
-    /// A Google API returned a non-2xx HTTP status.
+    /// A Google API returned a non-2xx HTTP status, or a request failed before a response.
+    /// A status code of zero identifies a transport or token-provider failure.
     case apiError(statusCode: Int, body: String)
 
     /// JWT generation or RSA signing failed (bad key, missing fields, unsupported encoding).
     case jwtGenerationFailed(underlying: any Error)
 
-    /// An artifact upload failed after any retries.
+    /// An artifact upload failed.
     case uploadFailed(asset: String, reason: String)
 
     /// A request could not be built, or credentials were missing/invalid.

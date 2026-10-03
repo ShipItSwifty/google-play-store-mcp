@@ -25,6 +25,8 @@ default.
 Write tools appear only when `GOOGLE_PLAY_ENABLE_WRITES=1`. See the [tool catalog](guides/tools.md#tool-catalog)
 for what the server can do and how each tool has been verified.
 
+[API documentation (DocC)](https://shipitswifty.github.io/google-play-store-mcp/) covers both libraries.
+
 ## Guides
 
 | Guide | Contents |

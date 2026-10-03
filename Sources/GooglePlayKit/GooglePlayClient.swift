@@ -82,7 +82,7 @@ public struct GooglePlayClient: Sendable {
     public func post<B: Encodable, T: Decodable>(_ path: String, body: B) async throws -> T {
         var request = try request("POST", path)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(body)
+        request.httpBody = try encode(body)
         return try await perform(request)
     }
 
@@ -95,7 +95,7 @@ public struct GooglePlayClient: Sendable {
     public func put<B: Encodable, T: Decodable>(_ path: String, body: B) async throws -> T {
         var request = try request("PUT", path)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(body)
+        request.httpBody = try encode(body)
         return try await perform(request)
     }
 
@@ -103,7 +103,7 @@ public struct GooglePlayClient: Sendable {
     public func patch<B: Encodable, T: Decodable>(_ path: String, body: B) async throws -> T {
         var request = try request("PATCH", path)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(body)
+        request.httpBody = try encode(body)
         return try await perform(request)
     }
 
@@ -114,9 +114,9 @@ public struct GooglePlayClient: Sendable {
     public func postExpectingNoContent<B: Encodable>(_ path: String, body: B) async throws {
         var request = try request("POST", path)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(body)
-        request.setValue("Bearer \(try await tokenProvider())", forHTTPHeaderField: "Authorization")
-        let (data, response) = try await session.data(for: request)
+        request.httpBody = try encode(body)
+        request.setValue("Bearer \(try await bearerToken())", forHTTPHeaderField: "Authorization")
+        let (data, response) = try await responseData(for: request)
         try Self.validate(response: response, data: data, path: path)
     }
 
@@ -125,8 +125,8 @@ public struct GooglePlayClient: Sendable {
     /// `edits.delete` returns 204 with no content, so there is nothing to decode.
     public func delete(_ path: String) async throws {
         var request = try request("DELETE", path)
-        request.setValue("Bearer \(try await tokenProvider())", forHTTPHeaderField: "Authorization")
-        let (data, response) = try await session.data(for: request)
+        request.setValue("Bearer \(try await bearerToken())", forHTTPHeaderField: "Authorization")
+        let (data, response) = try await responseData(for: request)
         try Self.validate(response: response, data: data, path: path)
     }
 
@@ -140,7 +140,7 @@ public struct GooglePlayClient: Sendable {
         request.httpBody = data
 
         logger.info("Uploading \(data.count) bytes to \(path)")
-        let (responseData, response) = try await session.data(for: request)
+        let (responseData, response) = try await responseData(for: request)
         return try Self.validateUpload(response: response, data: responseData, path: path)
     }
 
@@ -153,7 +153,7 @@ public struct GooglePlayClient: Sendable {
 
         let size = (try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? NSNumber)?.intValue
         logger.info("Uploading \(size.map { "\($0) bytes" } ?? "file") from \(fileURL.lastPathComponent) to \(path)")
-        let (responseData, response) = try await session.upload(for: request, fromFile: fileURL)
+        let (responseData, response) = try await uploadData(for: request, fileURL: fileURL)
         return try Self.validateUpload(response: response, data: responseData, path: path)
     }
 
@@ -166,7 +166,7 @@ public struct GooglePlayClient: Sendable {
         }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue("Bearer \(try await tokenProvider())", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(try await bearerToken())", forHTTPHeaderField: "Authorization")
         request.setValue(contentType, forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 600  // 10 minutes — AAB uploads can be large
         return request
@@ -183,6 +183,31 @@ public struct GooglePlayClient: Sendable {
         return data
     }
 
+    private func bearerToken() async throws -> String {
+        do { return try await tokenProvider() } catch let error as GoogleAPIError { throw error } catch {
+            throw GoogleAPIError.apiError(statusCode: 0, body: "Token provider failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func encode<B: Encodable>(_ body: B) throws -> Data {
+        do { return try JSONEncoder().encode(body) } catch {
+            throw GoogleAPIError.invalidConfiguration(reason: "Could not encode request: \(error.localizedDescription)")
+        }
+    }
+
+    private func responseData(for request: URLRequest) async throws -> (Data, URLResponse) {
+        do { return try await session.data(for: request) } catch {
+            throw GoogleAPIError.apiError(
+                statusCode: 0, body: "Request to \(request.url?.path ?? "") failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func uploadData(for request: URLRequest, fileURL: URL) async throws -> (Data, URLResponse) {
+        do { return try await session.upload(for: request, fromFile: fileURL) } catch {
+            throw GoogleAPIError.uploadFailed(asset: fileURL.lastPathComponent, reason: error.localizedDescription)
+        }
+    }
+
     private func request(_ method: String, _ path: String) throws -> URLRequest {
         guard let url = URL(string: "\(Self.baseURL)\(path)") else {
             throw GoogleAPIError.invalidConfiguration(reason: "Google Play: invalid URL for path '\(path)'")
@@ -194,10 +219,10 @@ public struct GooglePlayClient: Sendable {
 
     private func perform<T: Decodable>(_ request: URLRequest) async throws -> T {
         var request = request
-        request.setValue("Bearer \(try await tokenProvider())", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(try await bearerToken())", forHTTPHeaderField: "Authorization")
 
         let path = request.url?.path ?? ""
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await responseData(for: request)
         try Self.validate(response: response, data: data, path: path)
 
         do {
@@ -225,7 +250,7 @@ extension GooglePlayClient {
     /// requests (the MCP server's raw passthrough) do not have to re-derive the token flow.
     public func authorized(_ request: URLRequest) async throws -> URLRequest {
         var request = request
-        request.setValue("Bearer \(try await tokenProvider())", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(try await bearerToken())", forHTTPHeaderField: "Authorization")
         return request
     }
 }

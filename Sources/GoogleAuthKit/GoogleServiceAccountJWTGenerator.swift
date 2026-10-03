@@ -119,6 +119,12 @@ public actor GoogleServiceAccountJWTGenerator: Sendable {
         return "\(signingInput).\(base64URLEncode(signature))"
     }
 
+    private func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        do { return try await transport(request) } catch let error as GoogleAPIError { throw error } catch {
+            throw GoogleAPIError.apiError(statusCode: 0, body: "Authentication request failed: \(error.localizedDescription)")
+        }
+    }
+
     // MARK: - Private
 
     private func fetchNewToken() async throws -> String {
@@ -157,7 +163,7 @@ public actor GoogleServiceAccountJWTGenerator: Sendable {
         let body = "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=\(jwt)"
         request.httpBody = Data(body.utf8)
 
-        let (data, response) = try await transport(request)
+        let (data, response) = try await send(request)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             throw GoogleAPIError.apiError(statusCode: status, body: String(data: data, encoding: .utf8) ?? "")

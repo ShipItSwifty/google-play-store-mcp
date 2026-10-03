@@ -31,6 +31,7 @@ building on the lower-level edit methods.
 
 - ``GooglePlayClient``
 - <doc:EditLifecycle>
+- <doc:Releasing>
 
 ### Reading release state
 
@@ -62,6 +63,7 @@ building on the lower-level edit methods.
 - ``GooglePlayReleaseOverview``
 - ``GooglePlayTrack``
 - ``GooglePlayRelease``
+- ``GooglePlayCountryTargeting``
 - ``GooglePlayReleaseStatus``
 - ``GooglePlayReleaseNote``
 - ``GooglePlayBundle``

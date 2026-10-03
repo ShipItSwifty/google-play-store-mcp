@@ -43,7 +43,8 @@ extension GooglePlayClient {
     }
 
     /// Runs `body` inside a throwaway edit, deleting the edit afterwards whether or not
-    /// `body` threw.
+    /// `body` threw. A deletion failure after a successful read is reported; after a failed
+    /// read, cleanup is best effort and preserves the original error.
     ///
     /// Never commits. Use this for every read path; use ``GooglePlayUploadService`` for writes.
     public func withReadOnlyEdit<T>(
@@ -51,15 +52,17 @@ extension GooglePlayClient {
         _ body: (String) async throws -> T
     ) async throws -> T {
         let edit = try await createEdit(packageName: packageName)
+        let result: T
         do {
-            let result = try await body(edit.id)
-            try? await deleteEdit(packageName: packageName, editId: edit.id)
-            return result
+            result = try await body(edit.id)
         } catch {
-            // Cleanup must not mask the original failure, so its own error is discarded.
+            // Cleanup must not mask the original failure.
             try? await deleteEdit(packageName: packageName, editId: edit.id)
             throw error
         }
+        // A successful read must not hide a pending edit if deletion fails.
+        try await deleteEdit(packageName: packageName, editId: edit.id)
+        return result
     }
 
     // MARK: - Tracks
@@ -138,10 +141,13 @@ extension GooglePlayClient {
 
     /// Changes the staged-rollout fraction of the in-progress release on a track, and commits.
     ///
-    /// - Parameter userFraction: The new fraction. Play requires `0 < userFraction < 1`
-    ///   **exclusive** — a full rollout is a `.completed` release, not a fraction of `1.0`, and
-    ///   `0` is not a way to stop one (use ``haltRollout(packageName:track:)``). Play also
-    ///   rejects a decrease.
+    /// - Parameters:
+    ///   - packageName: The app's Android package name.
+    ///   - track: The track containing the staged release.
+    ///   - userFraction: The new fraction. Play requires `0 < userFraction < 1`
+    ///     **exclusive** — a full rollout is a `.completed` release, not a fraction of `1.0`, and
+    ///     `0` is not a way to stop one (use ``haltRollout(packageName:track:)``). Play also
+    ///     rejects a decrease.
     @discardableResult
     public func updateRollout(
         packageName: String,
@@ -162,7 +168,9 @@ extension GooglePlayClient {
                 versionCodes: release.versionCodes,
                 status: .inProgress,
                 userFraction: userFraction,
-                releaseNotes: release.releaseNotes
+                releaseNotes: release.releaseNotes,
+                countryTargeting: release.countryTargeting,
+                inAppUpdatePriority: release.inAppUpdatePriority
             )
         }
     }
@@ -180,7 +188,9 @@ extension GooglePlayClient {
                 versionCodes: release.versionCodes,
                 status: .halted,
                 userFraction: release.userFraction,
-                releaseNotes: release.releaseNotes
+                releaseNotes: release.releaseNotes,
+                countryTargeting: release.countryTargeting,
+                inAppUpdatePriority: release.inAppUpdatePriority
             )
         }
     }

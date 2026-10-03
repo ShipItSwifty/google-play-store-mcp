@@ -26,6 +26,41 @@ private struct Echo: Codable, Sendable, Equatable {
 @Suite("Google Play client HTTP primitives", .serialized)
 struct GooglePlayClientTests {
 
+    @Test("token-provider failures use the library error type")
+    func tokenProviderFailure() async throws {
+        let (session, _) = makeMockSession { _ in .empty() }
+        let client = GooglePlayClient(tokenProvider: { throw URLError(.timedOut) }, session: session)
+        await #expect(throws: GoogleAPIError.self) {
+            let _: Echo = try await client.get("/anything")
+        }
+    }
+
+    @Test("invalid request bodies use the library error type")
+    func encodingFailure() async throws {
+        let (client, sessionID) = makeClient { _ in .empty() }
+        await #expect(throws: GoogleAPIError.self) {
+            let _: Echo = try await client.post("/anything", body: ["fraction": Double.nan])
+        }
+        #expect(MockURLProtocol.requests(for: sessionID).isEmpty)
+    }
+
+    @Test("transport failures use GoogleAPIError for every request kind", arguments: ["get", "delete", "post", "binary", "file"])
+    func transportFailure(kind: String) async throws {
+        let (client, _) = makeClient { _ in .failure() }
+        let file = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try Data("payload".utf8).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        await #expect(throws: GoogleAPIError.self) {
+            switch kind {
+            case "get": let _: Echo = try await client.get("/anything")
+            case "delete": try await client.delete("/anything")
+            case "post": try await client.postExpectingNoContent("/anything", body: Echo(value: "req"))
+            case "binary": _ = try await client.uploadBinary(path: "/anything", data: Data(), contentType: "application/octet-stream")
+            default: _ = try await client.uploadFile(path: "/anything", fileURL: file, contentType: "application/octet-stream")
+            }
+        }
+    }
+
     @Test("GET decodes a 2xx JSON body")
     func getDecodes() async throws {
         let (client, _) = makeClient { _ in .json(#"{"value":"hi"}"#) }

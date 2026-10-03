@@ -72,7 +72,7 @@ struct GooglePlayMCP {
             }
         }
 
-        let transport = StdioTransport(logger: log)
+        let transport = CapabilityCompatibleTransport(StdioTransport(logger: log), logger: log)
         try await server.start(transport: transport)
         log.info(
             "google-play-store-mcp ready on stdio (writes \(writesEnabled ? "enabled" : "disabled"))")
