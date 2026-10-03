@@ -8,6 +8,10 @@
     "url": "https://github.com/ShipItSwifty"
   },
   "homepage": "https://github.com/ShipItSwifty/google-play-store-mcp",
+  "documentationUrl": "https://github.com/ShipItSwifty/google-play-store-mcp/blob/main/guides/server-setup.md",
+  "supportUrl": "https://github.com/ShipItSwifty/google-play-store-mcp/issues",
+  "privacyPolicyUrl": "https://github.com/ShipItSwifty/google-play-store-mcp/blob/main/guides/privacy.md",
+  "termsOfServiceUrl": "https://github.com/ShipItSwifty/google-play-store-mcp/blob/main/guides/terms.md",
   "repository": "https://github.com/ShipItSwifty/google-play-store-mcp",
   "license": "MIT",
   "keywords": ["android", "google-play", "release", "mcp"],
