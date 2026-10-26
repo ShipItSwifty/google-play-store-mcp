@@ -1,5 +1,5 @@
 {
-  "originHash" : "2ba4851e938a7c97d243d34200ec6fe802fa82a751f7c0763a9d760ee43826df",
+  "originHash" : "9623246dd1122b66d83c3d86a980962b9ff222d6c2a5e11e8d232788c509e300",
   "pins" : [
     {
       "identity" : "eventsource",
@@ -42,8 +42,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-crypto",
       "state" : {
-        "revision" : "1c80d3aff53fedc445b60692980cb4f19a618657",
-        "version" : "5.0.1"
+        "revision" : "c2cbadd7263439d8015189668f96ff5b5be565ce",
+        "version" : "5.0.3"
       }
     },
     {
@@ -69,8 +69,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-log",
       "state" : {
-        "revision" : "4038b6a4f74a1426f47eb1dd5b4bb5628a15d597",
-        "version" : "1.16.1"
+        "revision" : "c9c6bb9d275ec0d95c3ad16391f3f045dc623104",
+        "version" : "1.16.2"
       }
     },
     {
