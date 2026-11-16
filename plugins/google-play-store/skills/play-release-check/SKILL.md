@@ -15,9 +15,9 @@ state.
 
 ## Steps
 
-1. Call `play_release_overview` once. It returns tracks, bundles, and APKs from a single
-   throwaway edit. Do not call `play_list_tracks`, `play_list_bundles`, and `play_list_apks`
-   separately. Each of those opens its own edit.
+1. Call `play_release_overview` once with `limit: 10`. It returns tracks and the newest bundles
+   and APKs from a single throwaway edit. Do not call `play_list_tracks`, `play_list_bundles`, and
+   `play_list_apks` separately. Each of those opens its own edit.
 2. Call `play_list_reviews` with `maxResults: 200`.
 3. Build the report:
    - **Per track:** status (`completed`, `inProgress`, `halted`, `draft`), version codes, and

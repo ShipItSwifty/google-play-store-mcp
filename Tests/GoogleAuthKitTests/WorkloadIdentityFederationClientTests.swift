@@ -132,6 +132,33 @@ struct WorkloadIdentityFederationClientTests {
         }
     }
 
+    @Test("the impersonated token requests the configured scope, cloud-platform by default")
+    func impersonationScope() async throws {
+        try await withGitHubOIDCEnvironment {
+            for (scope, expected) in [
+                (GoogleServiceAccountJWTGenerator.Scope?.none, "https://www.googleapis.com/auth/cloud-platform"),
+                (.androidPublisher, "https://www.googleapis.com/auth/androidpublisher"),
+            ] {
+                let recorder = ExchangeRecorder()
+                let client =
+                    if let scope {
+                        WorkloadIdentityFederationClient(
+                            provider: provider, serviceAccountEmail: serviceAccount, scope: scope,
+                            transport: makeTransport(recorder: recorder))
+                    } else {
+                        WorkloadIdentityFederationClient(
+                            provider: provider, serviceAccountEmail: serviceAccount,
+                            transport: makeTransport(recorder: recorder))
+                    }
+                _ = try await client.cachedOrNewToken()
+
+                let iam = try #require(await recorder.requests.first { $0.url?.host == "iamcredentials.googleapis.com" })
+                let body = try #require(iam.httpBody.flatMap { String(data: $0, encoding: .utf8) })
+                #expect(body.contains(expected.replacingOccurrences(of: "/", with: "\\/")) || body.contains(expected))
+            }
+        }
+    }
+
     @Test("a second call reuses the cached token instead of re-running the exchange")
     func tokenIsCached() async throws {
         try await withGitHubOIDCEnvironment {

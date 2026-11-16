@@ -109,8 +109,12 @@ struct GooglePlayMCP {
             ? """
             Write tools are ENABLED and act on real users. Before any write, read the current state \
             with play_get_track and confirm the package, track, and fraction with the user. \
-            userFraction is exclusive (0 < f < 1); a full rollout is status completed, not 1.0. \
-            Play rejects lowering a rollout fraction; halt instead.
+            userFraction is exclusive (0 < f < 1); reach 100% with play_complete_rollout, not 1.0. \
+            Play rejects lowering a rollout fraction; use play_halt_rollout, then play_resume_rollout. \
+            Use play_promote_release to move a tested build between tracks without re-uploading. \
+            Commits fail by default when the app already has changes in Play review; pass \
+            changesInReviewBehavior=cancelInReviewAndSubmit only after the user agrees to cancel that \
+            review. Replies from play_reply_to_review are public and immediate; show the exact text first.
             """
             : """
             Write tools are disabled (GOOGLE_PLAY_ENABLE_WRITES is unset), so every tool is read-only. \
@@ -124,9 +128,11 @@ struct GooglePlayMCP {
         return """
             Google Play Developer API tools. \(package)
             Start with play_release_overview: it returns tracks, rollout fractions, bundles, and APKs in one \
-            call. Use play_get_track when only one track matters. Each edit-scoped read opens and deletes a \
-            throwaway Play edit, so prefer one overview call over several list calls.
-            play_list_reviews only covers roughly the last 7 days; say so when summarizing sentiment.
+            call (pass limit to see only the newest artifacts). Use play_get_track when only one track \
+            matters. Each edit-scoped read opens and deletes a throwaway Play edit, so prefer one overview \
+            call over several list calls.
+            play_list_reviews only covers roughly the last 7 days; say so when summarizing sentiment. Use its \
+            minStars, maxStars, appVersionCode, and unrepliedOnly filters instead of fetching everything.
             Data safety is write-only in the Play API; it cannot be read back or verified here.
             \(writes)
             """
@@ -150,7 +156,8 @@ struct GooglePlayMCP {
         packageName. An explicit packageName argument always wins.
 
         Optional: GOOGLE_PLAY_ENABLE_WRITES=1 additionally advertises the write tools
-        (upload and release, update or halt a staged rollout, upload Data safety labels).
+        (upload and release, promote between tracks, update, halt, resume, or complete a
+        staged rollout, reply to reviews, upload Data safety labels).
         Unset, every advertised tool is read-only.
         """
 }

@@ -58,6 +58,46 @@ struct GoogleTokenExchangeTests {
         #expect(body.contains("assertion="))
     }
 
+    @Test("concurrent callers that miss the cache share one token exchange")
+    func concurrentRefreshIsShared() async throws {
+        let counter = ExchangeCounter()
+        let generator = GoogleServiceAccountJWTGenerator(credentials: testCredentials()) { request in
+            await counter.record(request)
+            try await Task.sleep(for: .milliseconds(50))
+            return (
+                Data(#"{"access_token":"ya29.token","expires_in":3600}"#.utf8),
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            )
+        }
+
+        let tokens = try await withThrowingTaskGroup(of: String.self) { group in
+            for _ in 0..<5 {
+                group.addTask { try await generator.cachedOrNewToken() }
+            }
+            return try await group.reduce(into: [String]()) { $0.append($1) }
+        }
+
+        #expect(tokens == Array(repeating: "ya29.token", count: 5))
+        #expect(await counter.count == 1)
+    }
+
+    @Test("a failed shared refresh is not cached, so the next call tries again")
+    func failedRefreshIsRetriedNextCall() async throws {
+        let counter = ExchangeCounter()
+        let generator = GoogleServiceAccountJWTGenerator(credentials: testCredentials()) { request in
+            await counter.record(request)
+            let status = await counter.count == 1 ? 500 : 200
+            return (
+                Data(#"{"access_token":"ya29.token","expires_in":3600}"#.utf8),
+                HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
+            )
+        }
+
+        await #expect(throws: GoogleAPIError.self) { _ = try await generator.cachedOrNewToken() }
+        #expect(try await generator.cachedOrNewToken() == "ya29.token")
+        #expect(await counter.count == 2)
+    }
+
     @Test("a still-valid token is reused instead of re-signing")
     func cachesToken() async throws {
         let counter = ExchangeCounter()

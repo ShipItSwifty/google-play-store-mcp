@@ -65,6 +65,13 @@ enum ToolOutput {
         let track: GooglePlayTrack
     }
 
+    struct Reply: Codable {
+        let packageName: String
+        let reviewId: String
+        let replyText: String?
+        let lastEdited: GooglePlayTimestamp?
+    }
+
     struct DataSafetyUpload: Codable {
         let packageName: String
         let uploaded: Bool

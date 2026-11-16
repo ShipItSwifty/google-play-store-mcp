@@ -29,7 +29,7 @@ keep one instance alive rather than creating one per request.
 | Where the code runs | Use |
 |---|---|
 | A developer machine, a server, or CI with a key secret | ``GoogleServiceAccountCredentials`` + ``GoogleServiceAccountJWTGenerator`` |
-| GitHub Actions calling `cloud-platform`-scoped APIs (for example Firebase), especially where key creation is blocked by org policy | ``WorkloadIdentityFederationClient`` |
+| GitHub Actions without a stored key, especially where key creation is blocked by org policy (`cloud-platform` by default, or `androidPublisher` for Play) | ``WorkloadIdentityFederationClient`` |
 
 See <doc:WorkloadIdentityFederation> for the keyless setup.
 

@@ -44,12 +44,49 @@ try await uploader.uploadAndRelease(
 )
 try await client.updateRollout(packageName: "com.example.app", track: "production", userFraction: 0.5)
 try await client.haltRollout(packageName: "com.example.app", track: "production")
+try await client.resumeRollout(packageName: "com.example.app", track: "production")
+try await client.completeRollout(packageName: "com.example.app", track: "production")
 ```
 
 The rollout helpers preserve sibling releases, country targeting, and in-app update priority.
-Halting preserves the current fraction. Updating requires an in-progress release; it cannot
-resume a halted release or complete a rollout. Complete or resume it in Play Console, or build a
-complete track update within your own edit. A full rollout uses `.completed` with no fraction.
+Halting preserves the current fraction, and resuming restarts at it unless you pass a new one.
+Completing turns the staged release (in progress or halted) into a `.completed` release with no
+fraction and removes the completed release it supersedes; drafts stay.
+
+### Promote a tested build
+
+Move version codes that are already on one track to another, without uploading again:
+
+```swift
+try await client.promoteRelease(
+    packageName: "com.example.app",
+    fromTrack: "internal",
+    toTrack: "production",
+    status: .inProgress,
+    userFraction: 0.05
+)
+```
+
+With no `versionCodes`, the source track's completed release is promoted, along with its name and
+release notes. A completed promotion replaces the target's completed and staged releases; a
+staged promotion keeps the target's completed release and replaces only its staged one.
+
+### Changes already in review
+
+By default, Play cancels any changes already in review when you commit and resubmits them with
+yours — including, say, a store listing update a teammate sent for review. To fail instead, pass
+commit options to any write:
+
+```swift
+try await client.haltRollout(
+    packageName: "com.example.app",
+    track: "production",
+    commitOptions: GooglePlayCommitOptions(changesInReviewBehavior: .errorIfInReview)
+)
+```
+
+`changesNotSentForReview: true` holds a rejected change until someone sends it for review from
+the Play Console; Play requires it for some apps.
 
 ### Commit and publication
 
@@ -61,5 +98,10 @@ Play Console to check review and publication status. Draft releases are not serv
 
 Catch `GoogleAuthKit.GoogleAPIError` for authentication, request, response, and upload failures.
 `apiError` with status code zero indicates a transport or token-provider failure before an HTTP
-response. A failed read can also indicate unsuccessful edit cleanup. If a mutation's commit
-response is lost, inspect current state before retrying: the commit may already have succeeded.
+response. A failed read can also indicate unsuccessful edit cleanup.
+
+``GooglePlayClient`` retries idempotent requests (`GET`, `PUT`, `DELETE`) on a dropped connection,
+`408`, `429`, and retryable `5xx` responses, under a ``GooglePlayRetryPolicy`` you can pass at
+init (`.none` disables it). It never retries a `POST`, so edit creation, commits, and uploads are
+sent once. If a commit response is lost, inspect current state before retrying: the commit may
+already have succeeded.

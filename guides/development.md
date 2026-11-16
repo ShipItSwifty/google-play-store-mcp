@@ -56,3 +56,7 @@ git tag 0.1.0 && git push origin 0.1.0
 
 The release workflow stamps the version into `Entry.swift`, builds a macOS universal binary and a
 static Linux binary, attests both, and publishes a GitHub release.
+
+Because the version is stamped only in the release build, a binary built from source reports the
+placeholder in `Entry.swift` from `--version` and over MCP, not the latest tag. Check the tag you
+built from with `git describe --tags`.

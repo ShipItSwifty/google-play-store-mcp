@@ -19,7 +19,8 @@ import FoundationNetworking
 /// 1. Fetch a GitHub Actions OIDC ID token, audience-bound to the workload identity provider.
 /// 2. Exchange it at Google's STS endpoint for a federated access token scoped to the pool.
 /// 3. Use the federated token to impersonate the target service account via the IAM
-///    Credentials API, producing a `cloud-platform`-scoped access token.
+///    Credentials API, producing an access token with the requested scope (`cloud-platform`
+///    by default, `androidpublisher` for the Play Developer API).
 ///
 /// ## Usage
 /// ```swift
@@ -43,6 +44,9 @@ public actor WorkloadIdentityFederationClient: Sendable {
     /// Email of the service account to impersonate after the federated token is issued.
     private let serviceAccountEmail: String
 
+    /// The OAuth2 scope requested for the impersonated token.
+    private let scope: GoogleServiceAccountJWTGenerator.Scope
+
     /// The raw request/response transport. Matches `URLSession.data(for:)`'s signature exactly,
     /// so production code just wraps a session while tests can inject a closure directly —
     /// deterministic, and independent of any shared URLProtocol-based HTTP mocking (and its
@@ -54,16 +58,28 @@ public actor WorkloadIdentityFederationClient: Sendable {
 
     private var cachedToken: String?
     private var tokenExpiresAt: Date?
+    /// The exchange currently running, shared by every caller that arrives while it runs.
+    private var refresh: Task<String, any Error>?
 
     /// Creates a `WorkloadIdentityFederationClient`.
     ///
     /// - Parameters:
     ///   - provider: The workload identity pool provider's full resource name.
     ///   - serviceAccountEmail: The service account to impersonate.
+    ///   - scope: The scope of the impersonated token. Defaults to
+    ///     ``GoogleServiceAccountJWTGenerator/Scope/cloudPlatform``; pass
+    ///     ``GoogleServiceAccountJWTGenerator/Scope/androidPublisher`` to call the Play
+    ///     Developer API, which does not accept `cloud-platform` tokens.
     ///   - session: Overridable for tests; defaults to `.shared`.
-    public init(provider: String, serviceAccountEmail: String, session: URLSession = .shared) {
+    public init(
+        provider: String,
+        serviceAccountEmail: String,
+        scope: GoogleServiceAccountJWTGenerator.Scope = .cloudPlatform,
+        session: URLSession = .shared
+    ) {
         self.provider = provider
         self.serviceAccountEmail = serviceAccountEmail
+        self.scope = scope
         self.transport = { request in try await session.data(for: request) }
     }
 
@@ -74,20 +90,31 @@ public actor WorkloadIdentityFederationClient: Sendable {
     public init(
         provider: String,
         serviceAccountEmail: String,
+        scope: GoogleServiceAccountJWTGenerator.Scope = .cloudPlatform,
         transport: @escaping @Sendable (URLRequest) async throws -> (Data, URLResponse)
     ) {
         self.provider = provider
         self.serviceAccountEmail = serviceAccountEmail
+        self.scope = scope
         self.transport = transport
     }
 
     /// Returns a valid access token, reusing the cached token if it has more than 60s left.
+    ///
+    /// Concurrent callers that miss the cache share one exchange instead of each running all
+    /// three legs.
     public func cachedOrNewToken() async throws -> String {
         let now = Date()
         if let token = cachedToken, let expiry = tokenExpiresAt, expiry.timeIntervalSince(now) > 60 {
             return token
         }
-        return try await fetchNewToken()
+        if let refresh {
+            return try await refresh.value
+        }
+        let task = Task { try await self.fetchNewToken() }
+        refresh = task
+        defer { refresh = nil }
+        return try await task.value
     }
 
     private func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
@@ -201,7 +228,7 @@ public actor WorkloadIdentityFederationClient: Sendable {
         request.setValue("Bearer \(federatedToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(
-            GenerateAccessTokenRequest(scope: ["https://www.googleapis.com/auth/cloud-platform"]))
+            GenerateAccessTokenRequest(scope: [scope.rawValue]))
 
         let (data, response) = try await send(request)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {

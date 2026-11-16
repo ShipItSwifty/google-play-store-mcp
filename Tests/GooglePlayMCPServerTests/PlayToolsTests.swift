@@ -117,7 +117,9 @@ struct ToolArgumentSchemaTests {
         }
     }
 
-    @Test("userFraction advertises Play's exclusive (0, 1) range", arguments: ["play_upload_and_release", "play_update_rollout"])
+    @Test(
+        "userFraction advertises Play's exclusive (0, 1) range",
+        arguments: ["play_upload_and_release", "play_update_rollout", "play_resume_rollout", "play_promote_release"])
     func userFractionIsExclusive(tool: String) throws {
         let fraction = try property("userFraction", of: tool)
         #expect(fraction["exclusiveMinimum"] == .double(0))
@@ -276,7 +278,7 @@ struct ToolArgumentDecodingTests {
         }
     }
 
-    @Test("a non-numeric value is reported missing rather than silently coerced")
+    @Test("a non-numeric value is rejected rather than silently coerced")
     func nonNumericThrows() throws {
         #expect(throws: GoogleAPIError.self) {
             _ = try arguments(#"{"userFraction": "not-a-number"}"#).requireDouble("userFraction")
@@ -288,10 +290,102 @@ struct ToolArgumentDecodingTests {
         #expect(try arguments(#"{"maxResults": 5.0}"#).int("maxResults", default: 50) == 5)
     }
 
+    @Test("an optional number that is present but unparseable throws instead of reading as absent")
+    func optionalDoubleIsStrict() throws {
+        #expect(throws: GoogleAPIError.self) {
+            _ = try arguments(#"{"userFraction": "10%"}"#).double("userFraction")
+        }
+        #expect(try arguments(#"{}"#).double("userFraction") == nil)
+        #expect(try arguments(#"{"userFraction": null}"#).double("userFraction") == nil)
+        #expect(try arguments(#"{"userFraction": ""}"#).double("userFraction") == nil)
+        #expect(try arguments(#"{"userFraction": "0.1"}"#).double("userFraction") == 0.1)
+    }
+
+    @Test("optionalInt accepts whole numbers only")
+    func optionalIntIsStrict() throws {
+        #expect(try arguments(#"{"limit": 3}"#).optionalInt("limit") == 3)
+        #expect(try arguments(#"{"limit": "4"}"#).optionalInt("limit") == 4)
+        #expect(throws: GoogleAPIError.self) { _ = try arguments(#"{"limit": 2.5}"#).optionalInt("limit") }
+    }
+
+    @Test("booleans accept JSON booleans and their common string spellings")
+    func booleanArguments() throws {
+        #expect(try arguments(#"{"flag": true}"#).bool("flag") == true)
+        #expect(try arguments(#"{"flag": "false"}"#).bool("flag") == false)
+        #expect(try arguments(#"{}"#).bool("flag") == nil)
+        #expect(throws: GoogleAPIError.self) { _ = try arguments(#"{"flag": "maybe"}"#).bool("flag") }
+    }
+
+    @Test("string lists accept arrays of strings or numbers, and comma-separated text")
+    func stringListArguments() throws {
+        #expect(try arguments(#"{"codes": ["412", 413]}"#).stringList("codes") == ["412", "413"])
+        #expect(try arguments(#"{"codes": "412, 413"}"#).stringList("codes") == ["412", "413"])
+        #expect(try arguments(#"{"codes": []}"#).stringList("codes") == nil)
+        #expect(throws: GoogleAPIError.self) { _ = try arguments(#"{"codes": [true]}"#).stringList("codes") }
+    }
+
+    @Test("commit options default to errorIfInReview and parse the advertised values")
+    func commitOptionArguments() throws {
+        #expect(try arguments(#"{}"#).commitOptions() == GooglePlayCommitOptions(changesInReviewBehavior: .errorIfInReview))
+        for raw in PlayTools.changesInReviewBehaviors {
+            #expect(try arguments(#"{"changesInReviewBehavior": "\#(raw)"}"#).commitOptions().changesInReviewBehavior != nil)
+        }
+        #expect(
+            try arguments(#"{"changesInReviewBehavior": "cancelInReviewAndSubmit"}"#).commitOptions()
+                .changesInReviewBehavior == .cancelInReviewAndSubmit)
+    }
+
     @Test("maxResults is clamped into range")
     func integerArgumentClamps() throws {
         #expect(try arguments(#"{"maxResults": 0}"#).int("maxResults", default: 50) == 1)
         #expect(try arguments(#"{"maxResults": 9999}"#).int("maxResults", default: 50) == 100)
+    }
+}
+
+@Suite("Review filters")
+struct ReviewFilterTests {
+
+    private func review(stars: Int?, code: Int? = nil, replied: Bool = false) -> GooglePlayReview {
+        var comments = [
+            GooglePlayReviewComment(userComment: .init(text: "t", starRating: stars, appVersionCode: code))
+        ]
+        if replied { comments.append(GooglePlayReviewComment(developerComment: .init(text: "thanks"))) }
+        return GooglePlayReview(reviewId: "r", comments: comments)
+    }
+
+    @Test("star, version, and reply filters each narrow the match")
+    func filtersMatch() throws {
+        let lowStars = try ReviewFilter(maxStars: 2)
+        #expect(lowStars.matches(review(stars: 1)))
+        #expect(!lowStars.matches(review(stars: 4)))
+        #expect(!lowStars.matches(review(stars: nil)))
+
+        let highStars = try ReviewFilter(minStars: 4)
+        #expect(highStars.matches(review(stars: 5)))
+        #expect(!highStars.matches(review(stars: nil)))
+
+        let version = try ReviewFilter(appVersionCode: 412)
+        #expect(version.matches(review(stars: 3, code: 412)))
+        #expect(!version.matches(review(stars: 3, code: 411)))
+
+        let unreplied = try ReviewFilter(unrepliedOnly: true)
+        #expect(unreplied.matches(review(stars: 1)))
+        #expect(!unreplied.matches(review(stars: 1, replied: true)))
+
+        #expect(try ReviewFilter().isEmpty)
+        #expect(!unreplied.isEmpty)
+    }
+
+    @Test("an impossible star range is rejected")
+    func impossibleRange() {
+        #expect(throws: GoogleAPIError.self) { _ = try ReviewFilter(minStars: 4, maxStars: 2) }
+    }
+
+    @Test("newest keeps the highest version codes in ascending order")
+    func newestArtifacts() {
+        #expect(PlayTools.newest([5, 1, 9, 3], limit: 2) { $0 } == [5, 9])
+        #expect(PlayTools.newest([5, 1], limit: 5) { $0 } == [5, 1])
+        #expect(PlayTools.newest([5, 1], limit: nil) { $0 } == [5, 1])
     }
 }
 

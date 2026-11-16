@@ -12,7 +12,8 @@ Console account. You do this once per developer account.
 3. **Play Console:** open **Users and permissions → Invite new users**, enter the service account's
    email (`…@….iam.gserviceaccount.com`), and grant it access to the apps you want.
    - Read tools: **View app information and download bulk reports**.
-   - Reviews: **Reply to reviews**. The reviews API is gated on it, even for reading.
+   - Reviews: **Reply to reviews**. The reviews API is gated on it, even for reading, and
+     `play_reply_to_review` needs it to post.
    - Rollout and release tools: **Release to production, exclude devices, and use Play App
      Signing**, or **Release apps to testing tracks** for non-production tracks.
 4. Point the server at the key file (see [Credentials](#credentials)).
@@ -23,9 +24,9 @@ right after inviting the account is usually that delay, not a misconfiguration.
 The Play API only manages apps that already exist in the Play Console with at least one uploaded
 build. It cannot create a new app.
 
-> The MCP server reads a JSON key. `GoogleAuthKit`'s keyless `WorkloadIdentityFederationClient`
-> currently issues `cloud-platform`-scoped tokens, which the Play Developer API does not accept,
-> so it is not yet an alternative for Play.
+> The MCP server reads a JSON key. Library consumers in GitHub Actions can go keyless instead:
+> create `WorkloadIdentityFederationClient` with `scope: .androidPublisher` and pass it to
+> `GooglePlayClient(tokenProvider:session:)`. See [Libraries](library.md).
 
 ## Credentials
 
@@ -111,8 +112,8 @@ MCP server and adds three skills that tell the agent how to combine the tools:
 | Skill | Use it for |
 |---|---|
 | `play-release-check` | "What's live?": tracks, rollout percentages, newest artifact, and how the rolling version is reviewed |
-| `play-rollout` | Advancing or halting a staged rollout: read, check reviews, confirm, act, verify |
-| `play-review-triage` | Grouping the last week of reviews into themes by version and device |
+| `play-rollout` | Advancing, halting, resuming, or completing a staged rollout: read, check reviews, confirm, act, verify |
+| `play-review-triage` | Grouping the last week of reviews into themes by version and device, and drafting replies for approval |
 
 ```text
 /plugin marketplace add ShipItSwifty/google-play-store-mcp
@@ -145,6 +146,8 @@ same format (for example, Codex under `~/.codex/skills`) can use them as-is.
 | `403 … PERMISSION_DENIED` | The service account is not invited in Play Console, lacks the permission for that app, or was invited recently and the grant has not propagated yet. |
 | `404` on an app | Wrong `packageName`, or the app has never had a build uploaded in the Play Console. |
 | `Tool '…' modifies Play Store state and is disabled` | Writes are off. Set `GOOGLE_PLAY_ENABLE_WRITES=1` in the server's `env`, or re-run the installer with `--writes`. |
-| `userFraction must be greater than 0 and less than 1` | `1.0` is not a full rollout on Play. Use a `completed` release. |
+| `userFraction must be greater than 0 and less than 1` | `1.0` is not a full rollout on Play. Use `play_complete_rollout`. |
+| A write fails because changes are already in review | The write tools default to `changesInReviewBehavior: errorIfInReview` so they never cancel someone else's submission. Wait for the review, or pass `cancelInReviewAndSubmit` once the user agrees to cancel it. |
+| A commit is rejected asking for `changesNotSentForReview` | Pass `changesNotSentForReview: true`; then send the change for review from the Play Console. |
 | No reviews returned | Google only serves about the last 7 days. |
 | Play Console shows a pending edit you did not make | Should not come from this server: every read deletes its edit, and failed writes delete theirs. Check for another tool holding an edit. Play also expires abandoned edits on its own. |
