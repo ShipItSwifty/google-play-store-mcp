@@ -45,10 +45,21 @@ let token = try await wif.cachedOrNewToken()
 // Send as `Authorization: Bearer \(token)` to a Google Cloud API.
 ```
 
-> Important: The impersonated token is `cloud-platform` scoped. That suits Firebase App
-> Distribution and most Google Cloud APIs, but the Play Developer API only honours the
-> `androidpublisher` scope. Keyless auth for Play needs the impersonation step to request that
-> scope, which this client does not do yet.
+The impersonated token is `cloud-platform` scoped by default. That suits Firebase App
+Distribution and most Google Cloud APIs, but the Play Developer API only honours the
+`androidpublisher` scope. Request it for keyless Play access, and hand the client to
+`GooglePlayClient` as its token provider:
+
+```swift
+let wif = WorkloadIdentityFederationClient(
+    provider: "projects/123456789/locations/global/workloadIdentityPools/github-actions/providers/github",
+    serviceAccountEmail: "release@example.iam.gserviceaccount.com",
+    scope: .androidPublisher
+)
+let play = GooglePlayClient(tokenProvider: { try await wif.cachedOrNewToken() }, session: .shared)
+```
+
+The service account must still be invited in the Play Console, exactly as for a JSON key.
 
 ### Troubleshooting
 

@@ -54,6 +54,12 @@ public actor GoogleServiceAccountJWTGenerator: Sendable {
 
     private var cachedToken: String?
     private var tokenExpiresAt: Date?
+    /// The refresh currently running, shared by every caller that arrives while it runs.
+    ///
+    /// An actor is reentrant across `await`, so without this, callers that miss the cache
+    /// together (for example the concurrent reads in `releaseOverview`) would each sign a JWT
+    /// and make their own trip to the token endpoint.
+    private var refresh: Task<String, any Error>?
 
     /// Creates a generator with service account credentials.
     ///
@@ -85,12 +91,20 @@ public actor GoogleServiceAccountJWTGenerator: Sendable {
     }
 
     /// Returns a valid access token, reusing the cached token if it has more than 60s left.
+    ///
+    /// Concurrent callers that miss the cache share one refresh instead of each starting their own.
     public func cachedOrNewToken() async throws -> String {
         let now = Date()
         if let token = cachedToken, let expiry = tokenExpiresAt, expiry.timeIntervalSince(now) > 60 {
             return token
         }
-        return try await fetchNewToken()
+        if let refresh {
+            return try await refresh.value
+        }
+        let task = Task { try await self.fetchNewToken() }
+        refresh = task
+        defer { refresh = nil }
+        return try await task.value
     }
 
     // MARK: - Internal (exercised directly by tests)

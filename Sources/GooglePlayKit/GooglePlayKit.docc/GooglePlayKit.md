@@ -40,21 +40,35 @@ building on the lower-level edit methods.
 - ``GooglePlayClient/getTrack(packageName:track:)``
 - ``GooglePlayClient/listBundles(packageName:)``
 - ``GooglePlayClient/listApks(packageName:)``
-- ``GooglePlayClient/listReviews(packageName:maxResults:translationLanguage:)``
+- ``GooglePlayClient/listReviews(packageName:maxResults:translationLanguage:scanLimit:where:)``
 
 ### Releasing and rollout control
 
 - ``GooglePlayUploadService``
-- ``GooglePlayClient/updateRollout(packageName:track:userFraction:)``
-- ``GooglePlayClient/haltRollout(packageName:track:)``
+- ``GooglePlayClient/promoteRelease(packageName:fromTrack:toTrack:versionCodes:status:userFraction:releaseName:releaseNotes:commitOptions:)``
+- ``GooglePlayClient/updateRollout(packageName:track:userFraction:commitOptions:)``
+- ``GooglePlayClient/haltRollout(packageName:track:commitOptions:)``
+- ``GooglePlayClient/resumeRollout(packageName:track:userFraction:commitOptions:)``
+- ``GooglePlayClient/completeRollout(packageName:track:commitOptions:)``
+- ``GooglePlayCommitOptions``
 - ``GooglePlayClient/uploadDataSafetyLabels(packageName:safetyLabelsCSV:)``
+
+### Replying to reviews
+
+- ``GooglePlayClient/replyToReview(packageName:reviewId:replyText:)``
+- ``GooglePlayReviewReplyResult``
+
+### Reliability
+
+- ``GooglePlayRetryPolicy``
 
 ### Working with edits directly
 
 - ``GooglePlayClient/withReadOnlyEdit(packageName:_:)``
+- ``GooglePlayClient/withCommittedEdit(packageName:options:_:)``
 - ``GooglePlayClient/createEdit(packageName:)``
 - ``GooglePlayClient/validateEdit(packageName:editId:)``
-- ``GooglePlayClient/commitEdit(packageName:editId:)``
+- ``GooglePlayClient/commitEdit(packageName:editId:options:)``
 - ``GooglePlayClient/deleteEdit(packageName:editId:)``
 - ``GooglePlayClient/setTrack(packageName:editId:track:)``
 
@@ -70,4 +84,6 @@ building on the lower-level edit methods.
 - ``GooglePlayApk``
 - ``GooglePlayReview``
 - ``GooglePlayReviewComment``
+- ``GooglePlayTimestamp``
+- ``GooglePlayDeviceMetadata``
 - ``GooglePlayEdit``

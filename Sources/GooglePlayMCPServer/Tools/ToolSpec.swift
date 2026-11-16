@@ -22,6 +22,8 @@ struct ToolArgument: Sendable {
         case integer
         case number
         case boolean
+        /// An array of strings.
+        case stringArray
     }
 
     let name: String
@@ -48,10 +50,20 @@ struct ToolArgument: Sendable {
             name: name, kind: .string, description: description, isRequired: required, allowedValues: allowedValues)
     }
 
-    static func integer(_ name: String, _ description: String, minimum: Int? = nil, maximum: Int? = nil) -> ToolArgument {
+    static func integer(
+        _ name: String,
+        _ description: String,
+        required: Bool = false,
+        minimum: Int? = nil,
+        maximum: Int? = nil
+    ) -> ToolArgument {
         ToolArgument(
-            name: name, kind: .integer, description: description, isRequired: false,
+            name: name, kind: .integer, description: description, isRequired: required,
             minimum: minimum.map { Double($0) }, maximum: maximum.map { Double($0) })
+    }
+
+    static func stringArray(_ name: String, _ description: String) -> ToolArgument {
+        ToolArgument(name: name, kind: .stringArray, description: description, isRequired: false)
     }
 
     static func number(
@@ -68,10 +80,13 @@ struct ToolArgument: Sendable {
 
     /// This argument's JSON Schema property.
     var schema: Value {
-        var property: [String: Value] = [
-            "type": .string(kind.rawValue),
-            "description": .string(description),
-        ]
+        var property: [String: Value] = ["description": .string(description)]
+        if kind == .stringArray {
+            property["type"] = .string("array")
+            property["items"] = .object(["type": .string("string")])
+        } else {
+            property["type"] = .string(kind.rawValue)
+        }
         if let allowedValues {
             property["enum"] = .array(allowedValues.map { Value.string($0) })
         }
@@ -144,10 +159,70 @@ struct ToolArguments: Sendable {
 
     /// A required floating-point argument.
     func requireDouble(_ key: String) throws -> Double {
-        guard let value = number(key) else {
+        guard let value = try double(key) else {
             throw GoogleAPIError.invalidConfiguration(reason: "Missing required numeric argument '\(key)'.")
         }
         return value
+    }
+
+    /// An optional floating-point argument.
+    ///
+    /// - Throws: When the argument is present but is not a number. Reading an unparseable value
+    ///   as absent is how a malformed `userFraction` once turned a staged rollout into a full
+    ///   release, so a value that was sent must either parse or fail the call.
+    func double(_ key: String) throws -> Double? {
+        guard let value = values[key], !value.isNull else { return nil }
+        if let text = value.stringValue, text.trimmingCharacters(in: .whitespaces).isEmpty { return nil }
+        guard let parsed = number(key) else {
+            throw GoogleAPIError.invalidConfiguration(
+                reason: "Argument '\(key)' must be a number, got \(value). Pass a decimal such as 0.25.")
+        }
+        return parsed
+    }
+
+    /// An optional integer argument, read strictly: present but non-integral or non-numeric throws.
+    func optionalInt(_ key: String) throws -> Int? {
+        guard let value = try double(key) else { return nil }
+        guard value.rounded() == value, let integer = Int(exactly: value) else {
+            throw GoogleAPIError.invalidConfiguration(reason: "Argument '\(key)' must be a whole number, got \(value).")
+        }
+        return integer
+    }
+
+    /// An optional boolean argument. Hosts that stringify values may send `"true"` / `"false"`.
+    func bool(_ key: String) throws -> Bool? {
+        guard let value = values[key], !value.isNull else { return nil }
+        if let flag = value.boolValue { return flag }
+        switch value.stringValue?.lowercased() {
+        case "true", "1", "yes": return true
+        case "false", "0", "no": return false
+        case "": return nil
+        default:
+            throw GoogleAPIError.invalidConfiguration(reason: "Argument '\(key)' must be true or false, got \(value).")
+        }
+    }
+
+    /// An optional list of strings. A comma-separated string is accepted too, since some hosts
+    /// flatten arrays; numbers are read as their decimal text, so version codes can be sent
+    /// either way.
+    func stringList(_ key: String) throws -> [String]? {
+        guard let value = values[key], !value.isNull else { return nil }
+        let items: [String]
+        if let array = value.arrayValue {
+            items = try array.map { element in
+                if let text = element.stringValue { return text }
+                if let int = element.intValue { return String(int) }
+                throw GoogleAPIError.invalidConfiguration(reason: "Argument '\(key)' must be a list of strings.")
+            }
+        } else if let text = value.stringValue {
+            items = text.split(separator: ",").map(String.init)
+        } else if let int = value.intValue {
+            items = [String(int)]
+        } else {
+            throw GoogleAPIError.invalidConfiguration(reason: "Argument '\(key)' must be a list of strings.")
+        }
+        let cleaned = items.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        return cleaned.isEmpty ? nil : cleaned
     }
 
     /// Reads a numeric argument regardless of how the host encoded it.

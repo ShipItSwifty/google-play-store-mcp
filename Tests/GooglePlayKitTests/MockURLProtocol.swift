@@ -1,4 +1,5 @@
 import Foundation
+import GooglePlayKit
 import Synchronization
 
 #if canImport(FoundationNetworking)
@@ -10,6 +11,7 @@ struct MockHTTPResponse: Sendable {
     let statusCode: Int
     let body: Data
     var transportError: URLError? = nil
+    var headers: [String: String] = [:]
 
     static func json(_ json: String, statusCode: Int = 200) -> MockHTTPResponse {
         MockHTTPResponse(statusCode: statusCode, body: Data(json.utf8))
@@ -134,7 +136,7 @@ final class MockURLProtocol: URLProtocol, @unchecked Sendable {
             url: request.url!,
             statusCode: mock.statusCode,
             httpVersion: "HTTP/1.1",
-            headerFields: ["Content-Type": "application/json"]
+            headerFields: ["Content-Type": "application/json"].merging(mock.headers) { _, new in new }
         )!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: mock.body)
@@ -156,4 +158,9 @@ func makeMockSession(
     configuration.protocolClasses = [MockURLProtocol.self]
     configuration.httpAdditionalHeaders = [MockURLProtocol.sessionHeader: sessionID]
     return (URLSession(configuration: configuration), sessionID)
+}
+
+extension GooglePlayRetryPolicy {
+    /// The default attempt count with no waiting, so retry paths run without slowing the suite.
+    static let immediate = GooglePlayRetryPolicy(maxAttempts: 3, baseDelay: .zero, maxDelay: .zero)
 }

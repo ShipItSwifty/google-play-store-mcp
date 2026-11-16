@@ -13,7 +13,7 @@ private func makeClient(
     handler: @escaping MockURLProtocol.Handler
 ) -> (client: GooglePlayClient, sessionID: String) {
     let (session, sessionID) = makeMockSession(handler: handler)
-    return (GooglePlayClient(tokenProvider: { "test-token" }, session: session), sessionID)
+    return (GooglePlayClient(tokenProvider: { "test-token" }, session: session, retryPolicy: .immediate), sessionID)
 }
 
 private struct Echo: Codable, Sendable, Equatable {

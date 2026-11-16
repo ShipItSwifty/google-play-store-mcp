@@ -27,20 +27,30 @@ let overview = try await client.releaseOverview(packageName: "com.example.app")
 print(overview.tracks)
 ```
 
-Reviews and Data safety are not edit-scoped and open no edit.
+Reviews, review replies, and Data safety are not edit-scoped and open no edit.
+
+Edit deletion is retried on a transient failure, like every idempotent request. A `404` on a
+retried delete counts as success: an earlier attempt removed the edit and only its response was
+lost.
 
 ### Writes
 
-``GooglePlayUploadService/uploadAndRelease(aabPath:apkPath:track:releaseName:releaseNotes:status:userFraction:)``
-and the rollout helpers open their own edit, make their change, and commit. If any step fails, they
-delete the edit before rethrowing. Cleanup errors are discarded so they cannot mask the failure that
-matters.
+``GooglePlayUploadService/uploadAndRelease(aabPath:apkPath:track:releaseName:releaseNotes:status:userFraction:commitOptions:)``,
+the rollout helpers, and ``GooglePlayClient/promoteRelease(packageName:fromTrack:toTrack:versionCodes:status:userFraction:releaseName:releaseNotes:commitOptions:)``
+open their own edit, make their change, and commit. If any step fails, including the commit
+itself, they delete the edit before rethrowing. Cleanup errors are discarded so they cannot mask
+the failure that matters. ``GooglePlayClient/withCommittedEdit(packageName:options:_:)`` gives you
+the same guarantee for your own changes.
+
+A commit, by default, cancels changes already in Play review and resubmits them with yours. Pass
+``GooglePlayCommitOptions`` to fail instead.
 
 ### Staged rollouts
 
 - `userFraction` is only valid on an `inProgress` or `halted` release, and must satisfy
   `0 < userFraction < 1`. A full rollout is a `completed` release, not `1.0`.
-- Play rejects *lowering* a fraction. To reduce exposure, halt.
+- Play rejects *lowering* a fraction. To reduce exposure, halt; resume later from the recorded
+  fraction, or complete the rollout to reach every user.
 - A track `PUT` replaces the whole `releases` array, so the rollout helpers send every sibling
   release back unchanged. Sending only the modified release would delete the others.
 

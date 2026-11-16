@@ -44,10 +44,31 @@ let versionCode = try await uploader.uploadAndRelease(
 )
 
 // Rollout control.
-// userFraction is exclusive: 0 < f < 1. A full rollout is a .completed release, not 1.0.
+// userFraction is exclusive: 0 < f < 1. A full rollout is completeRollout, not 1.0.
 try await client.updateRollout(packageName: "com.example.app", track: "production", userFraction: 0.5)
-// Halting preserves the fraction, so you know where the rollout stopped.
+// Halting preserves the fraction, so resuming picks up where the rollout stopped.
 try await client.haltRollout(packageName: "com.example.app", track: "production")
+try await client.resumeRollout(packageName: "com.example.app", track: "production")
+try await client.completeRollout(packageName: "com.example.app", track: "production")
+
+// Promote what is on internal to production, without uploading again.
+try await client.promoteRelease(packageName: "com.example.app", fromTrack: "internal", toTrack: "production")
+
+// Fail instead of cancelling changes someone else already sent for review (Play's default).
+try await client.haltRollout(
+    packageName: "com.example.app",
+    track: "production",
+    commitOptions: GooglePlayCommitOptions(changesInReviewBehavior: .errorIfInReview)
+)
+
+// Reviews: filter while paging, then reply (public and immediate).
+let oneStar = try await client.listReviews(packageName: "com.example.app", maxResults: 20) {
+    $0.latestUserComment?.starRating == 1
+}
+if let review = oneStar.first {
+    try await client.replyToReview(
+        packageName: "com.example.app", reviewId: review.reviewId, replyText: "Thanks, fixed in 4.2.1.")
+}
 ```
 
 ## Edits are transactions
@@ -60,8 +81,16 @@ their own.
 `withReadOnlyEdit(packageName:_:)` therefore creates an edit, runs the read, and attempts to delete
 it — never commits. Deletion failure after a successful read is reported; deletion failure after
 a failed read does not replace the original error. Every read helper (`listTracks`, `getTrack`, `listBundles`, `listApks`,
-`releaseOverview`) goes through it, and `GooglePlayUploadService` deletes its edit if the upload
-fails partway. Reads that are not edit-scoped (`listReviews`) create no edit at all.
+`releaseOverview`) goes through it. Every write (`uploadAndRelease`, the rollout helpers,
+`promoteRelease`) deletes its edit if any step fails, including the commit. Calls that are not
+edit-scoped (`listReviews`, `replyToReview`) create no edit at all.
+
+## Retries
+
+The client retries idempotent requests (`GET`, `PUT`, `DELETE`) up to three times on a dropped
+connection, `408`, `429`, and `500`/`502`/`503`/`504`, backing off from 0.5s and honouring
+`Retry-After` up to 8s. It never retries a `POST`, so creating, committing, uploading, and
+replying are each sent once. Pass `retryPolicy: .none` to any initializer to turn retries off.
 
 ## Errors
 

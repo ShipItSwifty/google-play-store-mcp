@@ -1,7 +1,8 @@
 # Google Play Store by ShipItSwifty
 
 Inspect your Android app's Google Play releases and recent reviews from Claude, and optionally
-advance or halt a staged rollout. This independent MIT-licensed plugin is maintained by
+advance, halt, resume, or complete a staged rollout, promote a build between tracks, or reply to
+reviews. This independent MIT-licensed plugin is maintained by
 ShipItSwifty and is not affiliated with or endorsed by Google.
 
 ## What it includes
@@ -9,8 +10,8 @@ ShipItSwifty and is not affiliated with or endorsed by Google.
 | Skill | Workflow |
 |---|---|
 | `play-release-check` | Report tracks, rollout percentages, uploaded artifacts, and recent reviews. |
-| `play-review-triage` | Group the last week's reviews by theme, app version, and device. |
-| `play-rollout` | Read state, check reviews, confirm the requested change, act, and verify. |
+| `play-review-triage` | Group the last week's reviews by theme, app version, and device, and draft replies for approval. |
+| `play-rollout` | Read state, check reviews, confirm the requested change (advance, halt, resume, complete), act, and verify. |
 
 The plugin starts a local `google-play-store-mcp` server over stdio. Its launcher runs the
 executable already installed on your `PATH`; it does not download, install, or build software.
@@ -65,8 +66,10 @@ Claude's handling of conversation content follows your Claude account's settings
 
 Review results can contain reviewer names and review text. Reads of release state create and
 delete temporary Play edits without committing them. Enabled write tools can upload a build
-from a local file, publish a release, change or halt a rollout, or submit a Data safety CSV.
-The rollout skill asks for confirmation before changing Play state.
+from a local file, publish or promote a release, change, halt, resume, or complete a rollout,
+post a public reply to a review, or submit a Data safety CSV. By default a write fails rather
+than cancel changes already in Play review. The skills ask for confirmation before changing
+Play state.
 
 Reviews cover roughly seven days. Crash and ANR data are unavailable through these tools, and
 Data safety declarations cannot be read back. See the

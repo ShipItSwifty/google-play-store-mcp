@@ -42,13 +42,24 @@ Extracted from [ShipItSwifty](https://github.com/ShipItSwifty/shipitswifty), whi
 6. **`userFraction` rides only with a staged status, and is exclusive.** Play accepts it on
    `.inProgress` *and* `.halted`, and requires `0 < userFraction < 1` — a full rollout is a
    `.completed` release, not `1.0`. `assignToTrack` strips it on `.completed`/`.draft`;
-   `haltRollout` preserves it so the pause point survives.
+   `haltRollout` preserves it so the pause point survives; `resumeRollout` restarts from it, and
+   `completeRollout` drops it.
 7. **The server reuses one client per process.** `CachedClientProvider` memoizes the first
    *successful* `makeClient()` so the JWT generator's token cache survives across tool calls.
    Never construct a `GooglePlayClient` inside a tool handler; use the provider it is given.
 8. **Batch edit-scoped reads.** Each edit-scoped read costs an edit create and delete. When a tool
    needs several of them, do them inside one `withReadOnlyEdit` (concurrently with `async let`,
    as `releaseOverview` does) rather than calling several `list*` helpers.
+9. **Only idempotent requests are retried.** `GooglePlayClient.send` retries `GET`, `PUT`, and
+   `DELETE` under `GooglePlayRetryPolicy`. Never make a `POST` retryable: a repeated edit create
+   leaks an edit, and a repeated commit or upload can apply a change twice.
+10. **Write tools never cancel someone else's review by default.** Play's commit default cancels
+    changes already in review. The library keeps Play's default (`GooglePlayCommitOptions.default`)
+    for compatibility, but every MCP tool that commits takes `PlayTools.commitArguments` and
+    defaults to `errorIfInReview` via `ToolArguments.commitOptions()`.
+11. **A supplied argument must parse or fail.** Read optional numbers, integers, and booleans with
+    `ToolArguments.double`, `optionalInt`, and `bool`, which throw on a malformed value. Reading a
+    malformed `userFraction` as absent once meant a staged release could ship to every user.
 
 ## Adding an MCP tool
 
@@ -58,7 +69,8 @@ Extracted from [ShipItSwifty](https://github.com/ShipItSwifty/shipitswifty), whi
    Declare constraints on the argument (`allowedValues`, `minimum`/`maximum`,
    `exclusiveMinimum`/`exclusiveMaximum`) so hosts can reject a bad call before it reaches Play.
 2. Set `isReadOnly: false` for anything that changes Play state — that both gates it behind
-   `GOOGLE_PLAY_ENABLE_WRITES` and sets the `destructiveHint` the host shows the user.
+   `GOOGLE_PLAY_ENABLE_WRITES` and sets the `destructiveHint` the host shows the user. If it
+   commits an edit, append `commitArguments` and pass `arguments.commitOptions()` through.
 3. Return `try .rendered(text, structured: ToolOutput.X(...))`: readable text plus a `Codable`
    payload (declared in `Tools/ToolOutput.swift`) for `structuredContent`. MCP requires it to be
    an object, so wrap lists.
@@ -78,6 +90,10 @@ Extracted from [ShipItSwifty](https://github.com/ShipItSwifty/shipitswifty), whi
   safety declaration must happen in the Play Console UI.
 - **Reviews are ~7 days.** `reviews.list` will not return older reviews, however you page it.
 - **Most reads need an edit.** See invariant 1.
+- **No crash or ANR data.** That lives in the Play Developer Reporting API, a separate API and
+  scope this package does not call.
+- **Replies are public and immediate.** `reviews.reply` is not edit-scoped and has no draft state;
+  Play rejects replies over about 350 characters.
 
 ## Commands
 

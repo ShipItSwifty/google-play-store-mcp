@@ -53,6 +53,8 @@ public struct GooglePlayUploadService: Sendable {
     ///   - releaseNotes: Per-language release notes.
     ///   - status: Release status (`.completed`, `.inProgress`, `.halted`, `.draft`).
     ///   - userFraction: Fraction strictly between 0 and 1, used with `.inProgress` or `.halted`.
+    ///   - commitOptions: How the commit treats changes already in review. The default is Play's:
+    ///     cancel them and resubmit everything.
     /// - Returns: The version code of the uploaded artifact.
     @discardableResult
     public func uploadAndRelease(
@@ -62,7 +64,8 @@ public struct GooglePlayUploadService: Sendable {
         releaseName: String? = nil,
         releaseNotes: [GooglePlayReleaseNote] = [],
         status: GooglePlayReleaseStatus = .completed,
-        userFraction: Double? = nil
+        userFraction: Double? = nil,
+        commitOptions: GooglePlayCommitOptions = .default
     ) async throws -> Int {
         guard aabPath == nil || apkPath == nil else {
             throw GoogleAPIError.invalidConfiguration(
@@ -116,7 +119,7 @@ public struct GooglePlayUploadService: Sendable {
 
             // 4. Commit edit
             logger.info("Committing Play Store edit \(edit.id)")
-            try await client.commitEdit(packageName: packageName, editId: edit.id)
+            try await client.commitEdit(packageName: packageName, editId: edit.id, options: commitOptions)
             logger.info("Play Store edit committed. versionCode=\(versionCode) is committed to track '\(track)'")
 
             return versionCode

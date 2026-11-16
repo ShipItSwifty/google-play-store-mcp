@@ -13,7 +13,7 @@ private func makeClient(
     handler: @escaping MockURLProtocol.Handler
 ) -> (client: GooglePlayClient, sessionID: String) {
     let (session, sessionID) = makeMockSession(handler: handler)
-    return (GooglePlayClient(tokenProvider: { "test-token" }, session: session), sessionID)
+    return (GooglePlayClient(tokenProvider: { "test-token" }, session: session, retryPolicy: .immediate), sessionID)
 }
 
 private let tracksJSON = """
@@ -153,7 +153,7 @@ struct GooglePlayReadAPITests {
         #expect(requests.contains { $0.method == "DELETE" && $0.path.hasSuffix("/edits/edit-2") })
     }
 
-    @Test("a successful read reports cleanup failure without retrying deletion")
+    @Test("a successful read retries a failed cleanup, then reports it if it keeps failing")
     func successfulReadCleanupFailure() async throws {
         let (client, sessionID) = makeClient { request in
             if request.httpMethod == "POST" { return .json(#"{"id":"cleanup"}"#) }
@@ -170,7 +170,7 @@ struct GooglePlayReadAPITests {
             }
             #expect(status == 503)
         }
-        #expect(MockURLProtocol.requests(for: sessionID).filter { $0.method == "DELETE" }.count == 1)
+        #expect(MockURLProtocol.requests(for: sessionID).filter { $0.method == "DELETE" }.count == 3)
     }
 
     @Test("cleanup failure preserves the original read error")
