@@ -137,7 +137,13 @@ enum PlayTools {
 
         ToolSpec(
             name: "play_get_track",
-            description: "Fetch one Play Store track and its current releases.",
+            description: """
+                Fetch one Play Store track and its current releases: version codes, release status, \
+                staged-rollout fraction, release name, and release notes. Reads from one throwaway edit \
+                that is deleted afterwards. Use it when only one track matters, such as reading a rollout \
+                before and after changing it; for every track plus the uploaded artifacts, call \
+                play_release_overview once instead.
+                """,
             arguments: [
                 packageArgument,
                 .string("track", "Track name: internal, alpha, beta, or production.", required: true),
@@ -152,7 +158,13 @@ enum PlayTools {
 
         ToolSpec(
             name: "play_list_bundles",
-            description: "List the Android App Bundles (AABs) uploaded for an app, newest version code last.",
+            description: """
+                List the Android App Bundles (AABs) uploaded for an app, newest version code last, with \
+                each bundle's version code and SHA-256. Does not say which track a bundle is on; compare \
+                with the tracks for that. Reads from one throwaway edit that is deleted afterwards. When \
+                you also need tracks or APKs, call play_release_overview instead, which reads all three \
+                from a single edit.
+                """,
             arguments: [packageArgument, artifactLimitArgument]
         ) { arguments, client in
             let packageName = try arguments.packageName()
@@ -166,7 +178,12 @@ enum PlayTools {
 
         ToolSpec(
             name: "play_list_apks",
-            description: "List the APKs uploaded for an app, newest version code last.",
+            description: """
+                List the APKs uploaded for an app, newest version code last, with each APK's version \
+                code and SHA-256. Does not say which track an APK is on; compare with the tracks for \
+                that. Reads from one throwaway edit that is deleted afterwards. When you also need tracks \
+                or bundles, call play_release_overview instead, which reads all three from a single edit.
+                """,
             arguments: [packageArgument, artifactLimitArgument]
         ) { arguments, client in
             let packageName = try arguments.packageName()
